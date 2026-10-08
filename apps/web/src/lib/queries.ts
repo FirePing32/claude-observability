@@ -431,3 +431,41 @@ export async function productivity(ws: string, from: Date, to: Date) {
     fromOtel: otel.length > 0,
   };
 }
+
+export interface MachineRow {
+  device_id: string | null;
+  requests: number;
+  sessions: number;
+  value: number;
+  opus_value: number;
+  first_ts: Date | null;
+  last_ts: Date | null;
+}
+
+/** Usage per reporting machine over a range. device_id is null for requests no machine claimed. */
+export async function byMachine(ws: string, from: Date, to: Date) {
+  return rows<MachineRow>(sql`
+    select r.device_id, count(*)::int requests, count(distinct r.session_id)::int sessions,
+      sum(r.value_usd)::float8 value,
+      sum(case when r.model like 'claude-opus%' then r.value_usd else 0 end)::float8 opus_value,
+      min(r.ts) first_ts, max(r.ts) last_ts
+    from api_requests r
+    where r.workspace_id = ${ws} and r.ts >= ${ts(from)} and r.ts < ${ts(to)}
+    group by r.device_id order by value desc`);
+}
+
+export async function machineModelMix(ws: string, from: Date, to: Date) {
+  return rows<{ device_id: string | null; model: string; value: number }>(sql`
+    select r.device_id, r.model, sum(r.value_usd)::float8 value
+    from api_requests r
+    where r.workspace_id = ${ws} and r.ts >= ${ts(from)} and r.ts < ${ts(to)}
+    group by 1, 2`);
+}
+
+export async function dailyByMachine(ws: string, from: Date, to: Date, tz: string) {
+  return rows<{ day: string; device_id: string | null; value: number }>(sql`
+    select to_char((r.ts at time zone ${tz})::date, 'YYYY-MM-DD') as day, r.device_id, sum(r.value_usd)::float8 value
+    from api_requests r
+    where r.workspace_id = ${ws} and r.ts >= ${ts(from)} and r.ts < ${ts(to)}
+    group by 1, 2 order by 1`);
+}

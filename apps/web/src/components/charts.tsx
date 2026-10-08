@@ -124,6 +124,70 @@ export function DailyStacked({
   );
 }
 
+/** Daily values stacked by an arbitrary series (e.g. machines). Colors are assigned by the caller, per entity. */
+export function DailyStackedSeries({
+  rows,
+  series,
+  height = 260,
+}: {
+  rows: { day: string; key: string; value: number }[];
+  series: { key: string; label: string; color: string }[];
+  height?: number;
+}) {
+  const days = [...new Set(rows.map((r) => r.day))].sort();
+  const data = days.map((day) => {
+    const o: Record<string, number | string> = { day };
+    for (const s of series) o[s.key] = 0;
+    for (const r of rows) if (r.day === day) o[r.key] = ((o[r.key] as number) ?? 0) + r.value;
+    return o;
+  });
+  const byKey = new Map(series.map((s) => [s.key, s]));
+  if (!data.length) return <div className="grid h-40 place-items-center text-sm text-muted">No usage in this range.</div>;
+  return (
+    <div>
+      <Legend items={series} />
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={data} barCategoryGap="20%" margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid vertical={false} stroke="var(--grid)" />
+          <XAxis dataKey="day" tickFormatter={fmtDay} {...axisProps} minTickGap={16} />
+          <YAxis tickFormatter={fmtUsd} {...axisProps} axisLine={false} width={52} />
+          <Tooltip
+            cursor={{ fill: "var(--surface-2)" }}
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const items = payload.filter((p) => Number(p.value) > 0).reverse();
+              const total = items.reduce((sum, p) => sum + Number(p.value), 0);
+              return (
+                <TooltipBox
+                  title={fmtDay(String(label))}
+                  rows={items.map((p) => {
+                    const s = byKey.get(String(p.dataKey));
+                    return { key: String(p.dataKey), color: s?.color ?? "var(--series-other)", label: s?.label ?? String(p.dataKey), value: fmtUsd(Number(p.value)) };
+                  })}
+                  footer={`Total ${fmtUsd(total)}`}
+                />
+              );
+            }}
+          />
+          {series.map((s, i) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              stackId="a"
+              fill={s.color}
+              stroke="var(--surface)"
+              strokeWidth={1}
+              maxBarSize={24}
+              radius={i === series.length - 1 ? [4, 4, 0, 0] : 0}
+              isAnimationActive={false}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /** Cumulative API-equivalent value through a period, with the plan price as a reference line. */
 export function CumulativeValue({ points, planPrice, height = 220 }: { points: { day: string; value: number }[]; planPrice: number; height?: number }) {
   let run = 0;

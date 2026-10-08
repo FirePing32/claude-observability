@@ -44,7 +44,9 @@ export default function Privacy() {
 
       <h2>Who can see it</h2>
       <p>
-        Data belongs to a workspace. Only people the workspace owner invites can see it, plus anyone holding a read-only share link the owner creates (which
+        Data belongs to a workspace. Workspace members see account-level totals and also usage per enrolled machine (each machine&apos;s name, its
+        requests and API-equivalent value), which can indicate how much a particular computer, and so possibly a particular person, used. The service does
+        not label usage by person. Only people the workspace owner invites can see it, plus anyone holding a read-only share link the owner creates (which
         shows aggregate numbers only). Service providers that process data on our behalf: Vercel (hosting), Neon (database), Google (sign-in), and, only if
         configured, Resend (alert e-mails) and Anthropic (AI digest).
       </p>

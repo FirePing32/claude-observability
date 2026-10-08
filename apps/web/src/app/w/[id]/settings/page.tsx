@@ -56,7 +56,12 @@ export default async function Settings(props: PageProps) {
         </Card>
       </div>
 
-      <Card className="mt-4" title="Machines" sub="Every computer reporting usage for this account">
+      <Card
+        className="mt-4"
+        title="Machines"
+        sub="Every computer reporting usage for this account"
+        action={<a href={`/w/${id}/machines`} className="text-xs text-accent">Usage by machine →</a>}
+      >
         <div id="machines" />
         <Table head={["Machine", "System", "Claude Code", "Enrolled", "Last upload", "Last 7 days", ""]}>
           {devices.map((d) => {

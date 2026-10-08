@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bell, Boxes, FolderGit2, Gauge, Layers, Lightbulb, LogOut, PiggyBank, Plug, Settings } from "lucide-react";
+import { Activity, Bell, Boxes, FolderGit2, Gauge, Laptop, Layers, Lightbulb, LogOut, PiggyBank, Plug, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/sessions", label: "Sessions", icon: Activity },
   { href: "/models", label: "Models", icon: Boxes },
   { href: "/projects", label: "Projects", icon: FolderGit2 },
+  { href: "/machines", label: "Machines", icon: Laptop },
   { href: "/limits", label: "Limits", icon: Layers },
   { href: "/value", label: "Plan value", icon: PiggyBank },
   { href: "/insights", label: "Insights", icon: Lightbulb },
