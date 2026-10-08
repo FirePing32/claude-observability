@@ -1,6 +1,6 @@
 {
   "name": "claude-obs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Collector for Claude Observability: uploads usage-only records from Claude Code transcripts",
   "type": "module",
   "bin": {

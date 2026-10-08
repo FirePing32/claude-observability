@@ -11,9 +11,10 @@ uploads **usage numbers only** to your Claude Observability dashboard. It covers
    ```bash
    npm install -g claude-obs
    ```
-2. Get an enrollment code from your dashboard (Connect machines), then link this machine:
+2. Get an enrollment code from your dashboard (Connect machines), then link this machine. The dashboard shows
+   the exact command, including `--server <your dashboard URL>` if you need it:
    ```bash
-   claude-obs login --code XXXX-XXXX --server https://claude-observability.vercel.app
+   claude-obs login --code XXXX-XXXX
    ```
 3. Upload all history:
    ```bash
