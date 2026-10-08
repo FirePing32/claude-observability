@@ -93,34 +93,38 @@ export default async function Settings(props: PageProps) {
 
       <EnrollmentCodes workspaceId={id} tz={tz} owner={owner} />
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card title="Data quality" sub="Last 30 days">
-          <dl className="grid grid-cols-[1fr_auto] gap-y-2 text-sm">
-            <dt className="text-ink-2">Requests seen by transcripts and telemetry</dt>
-            <dd className="tabular">{int(dq.both)}</dd>
-            <dt className="text-ink-2">Transcript only</dt>
-            <dd className="tabular">{int(dq.transcript_only)}</dd>
-            <dt className="text-ink-2">Telemetry only (side requests transcripts miss)</dt>
-            <dd className="tabular">{int(dq.otel_only)}</dd>
-            <dt className="text-ink-2">Requests with unpriced models</dt>
-            <dd className="tabular">{int(dq.unpriced)}</dd>
-            <dt className="text-ink-2">Last upload</dt>
-            <dd>{relTime(dq.last_ingest)}</dd>
-          </dl>
-          {dq.unknown.length > 0 && (
-            <p className="mt-3 text-xs text-muted">
-              Unrecognized transcript record types (ignored safely): {dq.unknown.map((u) => `${u.k}×${u.n}`).join(", ")}
-            </p>
-          )}
-        </Card>
-      </div>
+      <Card className="mt-4" title="Data quality" sub="Last 30 days">
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            { label: "Seen by transcripts and telemetry", value: int(dq.both) },
+            { label: "Transcripts only", value: int(dq.transcript_only) },
+            { label: "Telemetry only", value: int(dq.otel_only), hint: "side requests transcripts miss" },
+            { label: "Unpriced models", value: int(dq.unpriced) },
+            { label: "Last upload", value: relTime(dq.last_ingest) },
+          ].map((m) => (
+            <div key={m.label} className="rounded-lg bg-surface-2 p-3">
+              <dt className="text-xs text-ink-2">{m.label}</dt>
+              <dd className="tabular mt-1 text-lg font-semibold">{m.value}</dd>
+              {m.hint && <dd className="text-[11px] text-muted">{m.hint}</dd>}
+            </div>
+          ))}
+        </dl>
+        {dq.both + dq.otel_only === 0 && dq.transcript_only > 0 && (
+          <p className="mt-3 text-xs text-muted">
+            Telemetry isn&apos;t enabled on any machine yet. Run <Code>claude-obs otel --install</Code> on each machine for exact totals.
+          </p>
+        )}
+        {dq.unknown.length > 0 && (
+          <p className="mt-2 text-xs text-muted">
+            Unrecognized transcript record types (ignored safely): {dq.unknown.map((u) => `${u.k}×${u.n}`).join(", ")}
+          </p>
+        )}
+      </Card>
 
       {owner && (
-        <div className="mt-4">
-          <Card title="Danger zone">
-            <DeleteWorkspaceForm workspaceId={id} name={ws.name} />
-          </Card>
-        </div>
+        <Card className="mt-4" title="Danger zone">
+          <DeleteWorkspaceForm workspaceId={id} name={ws.name} />
+        </Card>
       )}
     </>
   );
