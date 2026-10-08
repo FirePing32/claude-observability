@@ -38,5 +38,14 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FirePing32/claude-observability.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/FirePing32/claude-observability#readme",
+  "bugs": {
+    "url": "https://github.com/FirePing32/claude-observability/issues"
   }
 }

@@ -12,7 +12,7 @@ import {
 import type { z } from "zod";
 import { CLI_VERSION } from "./paths";
 
-export const DEFAULT_SERVER = process.env.CLAUDE_OBS_SERVER || "https://claude-obs.vercel.app";
+export const DEFAULT_SERVER = process.env.CLAUDE_OBS_SERVER || "https://claude-observability.vercel.app";
 
 export type UploadOutcome =
   | { ok: true; res: IngestResponse }

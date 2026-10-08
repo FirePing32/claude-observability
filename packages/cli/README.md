@@ -13,7 +13,7 @@ uploads **usage numbers only** to your Claude Observability dashboard. It covers
    ```
 2. Get an enrollment code from your dashboard (Connect machines), then link this machine:
    ```bash
-   claude-obs login --code XXXX-XXXX --server https://your-dashboard.example.com
+   claude-obs login --code XXXX-XXXX --server https://claude-observability.vercel.app
    ```
 3. Upload all history:
    ```bash
