@@ -10,5 +10,5 @@ export async function pageContext({ params, searchParams }: PageProps) {
   const sp = await searchParams;
   const m = await requireMember(id);
   const range = resolveRange(sp.range, m.workspace.billingDay);
-  return { ...m, id, sp, range, tz: m.workspace.timezone, filters: { model: sp.model ?? null, project: sp.project ?? null } };
+  return { ...m, id, sp, range, tz: m.workspace.timezone, filters: { model: sp.model ?? null, project: sp.project ?? null, device: sp.device ?? null } };
 }

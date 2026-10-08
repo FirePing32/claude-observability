@@ -16,12 +16,14 @@ async function rows<T>(q: SQL): Promise<T[]> {
 export interface Filters {
   model?: string | null;
   project?: string | null;
+  device?: string | null;
 }
 
 function filterSql(f: Filters = {}): SQL {
   const parts: SQL[] = [];
   if (f.model) parts.push(sql`and r.model = ${f.model}`);
   if (f.project) parts.push(sql`and r.project = ${f.project}`);
+  if (f.device) parts.push(sql`and r.device_id = ${f.device}`);
   return sql.join(parts, sql` `);
 }
 
@@ -174,6 +176,8 @@ export interface SessionRow {
   git_branch: string | null;
   compactions: number;
   errors: number;
+  device_id: string | null;
+  device_name: string | null;
 }
 
 export async function sessions(
@@ -195,6 +199,8 @@ export async function sessions(
       mode() within group (order by r.project) project,
       mode() within group (order by r.entrypoint) entrypoint,
       mode() within group (order by r.git_branch) git_branch,
+      mode() within group (order by r.device_id) device_id,
+      (select d.name from devices d where d.id = mode() within group (order by r.device_id)) device_name,
       (select count(*) from session_events e where e.workspace_id = r.workspace_id and e.session_id = r.session_id and e.event = 'compaction')::int compactions,
       (select count(*) from error_events x where x.workspace_id = r.workspace_id and x.session_id = r.session_id)::int errors
     from api_requests r
@@ -244,6 +250,11 @@ export async function sessionDetail(ws: string, sessionId: string) {
       thinking::float8 thinking, value_usd, effort, speed, duration_ms, query_source, project, git_branch, entrypoint,
       cc_version, sources
     from api_requests where workspace_id = ${ws} and session_id = ${sessionId} order by ts, request_id`);
+  const machines = await rows<{ name: string; requests: number }>(sql`
+    select coalesce(d.name, 'Unknown machine') as name, count(*)::int requests
+    from api_requests r left join devices d on d.id = r.device_id
+    where r.workspace_id = ${ws} and r.session_id = ${sessionId}
+    group by 1 order by 2 desc`);
   const [meta] = await rows<{ title: string | null; title_source: string | null; agent_name: string | null }>(
     sql`select title, title_source, agent_name from session_meta where workspace_id = ${ws} and session_id = ${sessionId}`,
   );
@@ -261,7 +272,7 @@ export async function sessionDetail(ws: string, sessionId: string) {
     sql`select total_cost_usd, lines_added, lines_removed, api_ms::float8 api_ms, tool_ms::float8 tool_ms, started_at
         from session_snapshots where workspace_id = ${ws} and session_id = ${sessionId}`,
   );
-  return { reqs, meta: meta ?? null, events, errors, limits, snapshot: snapshot ?? null };
+  return { reqs, meta: meta ?? null, events, errors, limits, snapshot: snapshot ?? null, machines };
 }
 
 export async function projects(ws: string, from: Date, to: Date) {
@@ -278,7 +289,10 @@ export async function filterOptions(ws: string) {
   const projs = await rows<{ v: string }>(
     sql`select distinct project v from api_requests where workspace_id = ${ws} and project is not null order by 1 limit 200`,
   );
-  return { models: models.map((m) => m.v), projects: projs.map((p) => p.v) };
+  const devices = await rows<{ id: string; name: string }>(
+    sql`select id, name from devices where workspace_id = ${ws} order by created_at`,
+  );
+  return { models: models.map((m) => m.v), projects: projs.map((p) => p.v), devices };
 }
 
 /** Hour-of-week heatmap in the workspace timezone (dow 0 = Sunday). */

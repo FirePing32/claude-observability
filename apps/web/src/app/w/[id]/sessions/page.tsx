@@ -43,6 +43,7 @@ export default async function Sessions(props: PageProps) {
           </form>
           <SelectFilter name="model" value={filters.model} placeholder="All models" options={opts.models.map((m) => ({ value: m, label: modelLabel(m) }))} />
           <SelectFilter name="project" value={filters.project} placeholder="All projects" options={opts.projects.map((p) => ({ value: p, label: p }))} />
+          <SelectFilter name="device" value={filters.device} placeholder="All machines" options={opts.devices.map((d) => ({ value: d.id, label: d.name }))} />
           <div className="flex gap-1 text-xs">
             {(["value", "recent", "requests"] as const).map((s) => (
               <Link key={s} href={qs(s)} className={`rounded-md px-2 py-1 ${sort === s ? "bg-surface-2 font-medium" : "text-ink-2"}`}>
@@ -51,7 +52,7 @@ export default async function Sessions(props: PageProps) {
             ))}
           </div>
         </div>
-        <Table head={["Session", "Project · branch", "Started", "Duration", "Models", "Req.", "Subagents", "Compact.", "Value"]}>
+        <Table head={["Session", "Machine", "Project · branch", "Started", "Duration", "Models", "Req.", "Subagents", "Compact.", "Value"]}>
           {rows.map((s) => (
             <tr key={s.session_id} className="hover:bg-surface-2">
               <Td right={false} className="max-w-80 truncate">
@@ -64,6 +65,7 @@ export default async function Sessions(props: PageProps) {
                   </span>
                 )}
               </Td>
+              <Td>{s.device_name ?? <span className="text-muted">-</span>}</Td>
               <Td>
                 {s.project ?? "-"}
                 {s.git_branch && s.git_branch !== "HEAD" ? <span className="text-muted"> · {s.git_branch}</span> : null}

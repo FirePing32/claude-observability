@@ -51,6 +51,12 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
         sub={
           <span className="flex flex-wrap gap-2">
             <span>{dateTime(d.reqs[0]!.ts, tz)} → {dateTime(d.reqs.at(-1)!.ts, tz)}</span>
+            {d.machines.map((m) => (
+              <Badge key={m.name} tone="accent">
+                {m.name}
+                {d.machines.length > 1 ? ` · ${m.requests} req` : ""}
+              </Badge>
+            ))}
             {meta.project && <Badge>{meta.project}</Badge>}
             {meta.git_branch && meta.git_branch !== "HEAD" && <Badge>{meta.git_branch}</Badge>}
             {meta.entrypoint && <Badge>{meta.entrypoint}</Badge>}
