@@ -1,0 +1,40 @@
+{
+  "name": "claude-obs",
+  "version": "0.1.0",
+  "description": "Collector for Claude Observability: uploads usage-only records from Claude Code transcripts",
+  "type": "module",
+  "bin": {
+    "claude-obs": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@claude-obs/shared": "*",
+    "@types/node": "^22.10.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3",
+    "zod": "^4.6.5"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "usage",
+    "observability"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

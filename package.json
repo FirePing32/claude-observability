@@ -1,0 +1,12 @@
+{
+  "name": "claude-observability",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build": "npm run build -w @claude-obs/shared --if-present && npm run build -w claude-obs && npm run build -w @claude-obs/web",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev -w @claude-obs/web"
+  },
+  "engines": { "node": ">=20" }
+}
