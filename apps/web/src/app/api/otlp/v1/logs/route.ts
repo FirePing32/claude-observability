@@ -4,7 +4,7 @@ import { db, schema } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { ingestOtelRequests, recordIngest } from "@/lib/ingest";
 import { decodeLogs } from "@/lib/otlp";
-import { otlpAccountOk, readOtlp } from "@/lib/otlp-route";
+import { otlpAccountOk, otlpEmailRejection, readOtlp } from "@/lib/otlp-route";
 
 /** OTLP/HTTP JSON log receiver for Claude Code (`OTEL_EXPORTER_OTLP_ENDPOINT=<app>/api/otlp`). */
 export async function POST(req: Request) {
@@ -12,6 +12,8 @@ export async function POST(req: Request) {
   if (r instanceof Response) return r;
   const { ctx, body } = r;
   const d = decodeLogs(body);
+  const emailRejected = await otlpEmailRejection(ctx, d.emails, d.requests.length + d.errors.length > 0);
+  if (emailRejected) return emailRejected;
   if (!(await otlpAccountOk(ctx, d.accountUuids)))
     return apiError(409, "account_mismatch", "Telemetry is from a different Claude account than this workspace tracks.");
 

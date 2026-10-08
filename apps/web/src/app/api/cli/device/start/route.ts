@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     name: body.data.name,
     os: body.data.os,
     ip,
+    accountEmailProof: body.data.accountEmailProof ?? null,
     expiresAt: new Date(Date.now() + TTL_SEC * 1000),
   });
   const origin = process.env.BETTER_AUTH_URL ?? new URL(req.url).origin;

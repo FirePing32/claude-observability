@@ -132,6 +132,8 @@ export const MAX_RECORDS_PER_BATCH = 500;
 export const ingestBatch = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   accountHash: z.string().regex(/^[a-f0-9]{64}$/),
+  /** One-way proof of the Claude account e-mail (see EMAIL_PROOF_PREFIX). Never stored. Required by workspaces that check it. */
+  accountEmailProof: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
   plan: z
     .object({
       rateLimitTier: shortText.nullable(),
@@ -167,6 +169,7 @@ export const apiError = z.object({
     "rate_limited",
     "payload_too_large",
     "invalid_code",
+    "email_mismatch",
     "expired",
     "internal",
   ]),
@@ -175,7 +178,16 @@ export const apiError = z.object({
 export type ApiError = z.infer<typeof apiError>;
 
 // ---- enrollment ----
+const emailProof = z.string().regex(/^[a-f0-9]{64}$/).nullable().optional();
+
+/**
+ * accountEmailProof = sha256(EMAIL_PROOF_PREFIX + lowercased e-mail), hex. Computed by the collector
+ * (node:crypto) and by the server; kept out of this module so it stays browser-safe.
+ */
+export const EMAIL_PROOF_PREFIX = "claude-obs-email-v1:";
+
 export const enrollRequest = z.object({
+  accountEmailProof: emailProof,
   code: z.string().min(4).max(64),
   name: z.string().min(1).max(100),
   os: shortText,
@@ -201,7 +213,7 @@ export const whoamiResponse = z.object({
 });
 export type WhoamiResponse = z.infer<typeof whoamiResponse>;
 
-export const deviceStartRequest = z.object({ name: z.string().min(1).max(100), os: shortText });
+export const deviceStartRequest = z.object({ name: z.string().min(1).max(100), os: shortText, accountEmailProof: emailProof });
 export const deviceStartResponse = z.object({
   userCode: z.string(),
   deviceCode: z.string(),

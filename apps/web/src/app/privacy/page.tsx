@@ -28,6 +28,10 @@ export default function Privacy() {
         <li>session titles, unless you turn them off with <code>claude-obs config titles off</code></li>
         <li>error categories and usage-limit events</li>
         <li>a salted hash of your Claude account id, used only to keep data from different accounts apart</li>
+        <li>
+          a one-way hash of your Claude account e-mail, compared against the workspace&apos;s approved e-mails to reject data from unapproved accounts,
+          then discarded (never stored)
+        </li>
       </ul>
       <p>
         <strong>The collector never uploads</strong> prompts, responses, model thinking, code, file contents, tool inputs or outputs, full file paths,

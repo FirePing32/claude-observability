@@ -91,6 +91,7 @@ describe("collect", () => {
     for (const b of c.batches) expect(ingestBatch.safeParse(b).success).toBe(true);
     expect(c.batches[0]!.accountHash).toBe(hashAccount("salt", ACCOUNT));
     expect(c.batches[0]!.plan?.rateLimitTier).toBe("default_claude_max_5x");
+    expect(c.batches[0]!.accountEmailProof).toMatch(/^[0-9a-f]{64}$/); // proof, not the e-mail
   });
 
   it("never uploads content, emails or full paths", () => {

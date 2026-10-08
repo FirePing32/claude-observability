@@ -149,23 +149,35 @@ async function main(): Promise<void> {
       const server = (flags.server ?? DEFAULT_SERVER).replace(/\/+$/, "");
       const name = flags.name ?? defaultDeviceName();
       const os = `${process.platform}-${process.arch}`;
+      const local = readAccount(defaultClaudeRoot());
+      const accountEmailProof = local.emailProof;
       let res;
-      if (flags.code) {
-        res = await api.enroll(server, { code: flags.code.trim().toUpperCase(), name, os, configDir: process.env.CLAUDE_CONFIG_DIR ?? null });
-      } else {
-        const start = await api.deviceStart(server, { name, os });
-        console.log(`\nOpen ${start.verificationUrl}\nand confirm the code:  ${start.userCode}\n\nWaiting for approval…`);
-        const deadline = Date.now() + start.expiresIn * 1000;
-        for (;;) {
-          await new Promise((r) => setTimeout(r, start.interval * 1000));
-          const p = await api.devicePoll(server, start.deviceCode);
-          if (p.status === "approved") {
-            res = p;
-            break;
+      try {
+        if (flags.code) {
+          res = await api.enroll(server, { code: flags.code.trim().toUpperCase(), name, os, configDir: process.env.CLAUDE_CONFIG_DIR ?? null, accountEmailProof });
+        } else {
+          const start = await api.deviceStart(server, { name, os, accountEmailProof });
+          console.log(`\nOpen ${start.verificationUrl}\nand confirm the code:  ${start.userCode}\n\nWaiting for approval…`);
+          const deadline = Date.now() + start.expiresIn * 1000;
+          for (;;) {
+            await new Promise((r) => setTimeout(r, start.interval * 1000));
+            const p = await api.devicePoll(server, start.deviceCode);
+            if (p.status === "approved") {
+              res = p;
+              break;
+            }
+            if (p.status === "denied") throw new Error("The request was denied in the browser.");
+            if (p.status === "expired" || Date.now() > deadline) throw new Error("The code expired. Run `claude-obs login` again.");
           }
-          if (p.status === "denied") throw new Error("The request was denied in the browser.");
-          if (p.status === "expired" || Date.now() > deadline) throw new Error("The code expired. Run `claude-obs login` again.");
         }
+      } catch (e) {
+        if ((e as { code?: string }).code === "email_mismatch") {
+          throw new Error(
+            `This machine is logged into Claude as ${local.email ?? "an unknown account"}, which isn't approved for that workspace. ` +
+              "Log in to Claude with the approved account (run `claude`, then /login), or ask a workspace owner to add this e-mail under Settings → Claude account.",
+          );
+        }
+        throw e;
       }
       saveCredentials({
         server,

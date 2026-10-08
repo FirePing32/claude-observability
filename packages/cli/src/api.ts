@@ -121,9 +121,9 @@ async function call<T extends z.ZodType>(
 }
 
 export const api = {
-  enroll: (server: string, body: { code: string; name: string; os: string; configDir: string | null }) =>
+  enroll: (server: string, body: { code: string; name: string; os: string; configDir: string | null; accountEmailProof: string | null }) =>
     call(server, "/api/cli/enroll", { method: "POST", body }, enrollResponse),
-  deviceStart: (server: string, body: { name: string; os: string }) =>
+  deviceStart: (server: string, body: { name: string; os: string; accountEmailProof: string | null }) =>
     call(server, "/api/cli/device/start", { method: "POST", body }, deviceStartResponse),
   devicePoll: (server: string, deviceCode: string) =>
     call(server, "/api/cli/device/poll", { method: "POST", body: { deviceCode } }, devicePollResponse),

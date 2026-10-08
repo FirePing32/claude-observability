@@ -48,6 +48,7 @@ export default async function Setup(props: PageProps) {
               <li>Project folder name (or a hash) and git branch</li>
               <li>Session titles (switch off with <Code>claude-obs config titles off</Code>)</li>
               <li>Error categories and usage-limit hits</li>
+              <li>A one-way hash of the Claude login e-mail, checked against this workspace&apos;s approved e-mails and never stored</li>
             </ul>
             <p className="mt-3 text-sm text-ink-2">
               <strong className="text-ink">Never:</strong> prompts, responses, thinking, code, file contents, tool input/output, full paths, or your Claude login.

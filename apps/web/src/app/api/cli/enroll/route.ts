@@ -1,6 +1,7 @@
 import { enrollRequest } from "@claude-obs/shared";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
+import { checkClaudeEmail, EMAIL_MISMATCH_MESSAGE, EMAIL_MISSING_MESSAGE } from "@/lib/email-check";
 import { apiError, clientIp, rateLimited } from "@/lib/http";
 import { newDeviceToken, newId, normalizeCode, sha256 } from "@/lib/tokens";
 
@@ -11,6 +12,17 @@ export async function POST(req: Request) {
   if (!body.success) return apiError(422, "schema", "Invalid enrollment request.");
 
   const codeHash = sha256(normalizeCode(body.data.code));
+  // Check the machine's Claude account e-mail before spending a use of the code.
+  const [pending] = await db
+    .select({ ws: schema.workspaces })
+    .from(schema.enrollmentCodes)
+    .innerJoin(schema.workspaces, eq(schema.workspaces.id, schema.enrollmentCodes.workspaceId))
+    .where(and(eq(schema.enrollmentCodes.codeHash, codeHash), isNull(schema.enrollmentCodes.revokedAt), gt(schema.enrollmentCodes.expiresAt, new Date())));
+  if (pending) {
+    const email = await checkClaudeEmail(pending.ws, { proof: body.data.accountEmailProof });
+    if (email === "mismatch") return apiError(403, "email_mismatch", EMAIL_MISMATCH_MESSAGE);
+    if (email === "missing") return apiError(426, "upgrade_required", EMAIL_MISSING_MESSAGE);
+  }
   // Atomically consume one use of a live code.
   const [code] = await db
     .update(schema.enrollmentCodes)

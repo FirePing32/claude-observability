@@ -5,6 +5,7 @@ import { evaluateAlerts } from "@/lib/alerts";
 import { authenticateDevice } from "@/lib/device-auth";
 import { apiError, MIN_CLI_VERSION, rateLimited, versionAtLeast } from "@/lib/http";
 import { checkAccount, ingestTranscriptBatch } from "@/lib/ingest";
+import { checkClaudeEmail, EMAIL_MISMATCH_MESSAGE, EMAIL_MISSING_MESSAGE } from "@/lib/email-check";
 
 export const maxDuration = 60;
 
@@ -31,6 +32,10 @@ export async function POST(req: Request) {
   const parsed = ingestBatch.safeParse(json);
   if (!parsed.success) return apiError(422, "schema", parsed.error.issues.slice(0, 3).map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   const batch = parsed.data;
+
+  const email = await checkClaudeEmail(ctx.workspace, { proof: batch.accountEmailProof });
+  if (email === "mismatch") return apiError(403, "email_mismatch", EMAIL_MISMATCH_MESSAGE);
+  if (email === "missing") return apiError(426, "upgrade_required", EMAIL_MISSING_MESSAGE);
 
   const account = await checkAccount(ctx, batch.accountHash, batch.plan?.rateLimitTier ?? null);
   if (account === "mismatch")

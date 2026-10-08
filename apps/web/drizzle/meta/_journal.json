@@ -8,6 +8,13 @@
       "when": 1791447182958,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791482738107,
+      "tag": "0001_claude_email_check",
+      "breakpoints": true
     }
   ]
 }

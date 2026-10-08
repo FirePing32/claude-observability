@@ -6,12 +6,13 @@ import { db, schema } from "@/lib/db";
 import { dateTime, int, relTime, usd } from "@/lib/format";
 import { pageContext, type PageProps } from "@/lib/page";
 import { dataQuality, devicesWithStats } from "@/lib/queries";
-import { DeleteWorkspaceForm, DeviceActions, InviteForm, ShareLinkButton, SmallAction } from "./forms";
+import { allowedClaudeEmails } from "@/lib/email-check";
+import { ClaudeEmailPolicyForm, DeleteWorkspaceForm, DeviceActions, InviteForm, ShareLinkButton, SmallAction } from "./forms";
 
 export default async function Settings(props: PageProps) {
   const { id, workspace: ws, role, user, tz } = await pageContext(props);
   const owner = role === "owner";
-  const [members, invites, devices, codes, links, dq] = await Promise.all([
+  const [members, invites, devices, codes, links, dq, approvedEmails] = await Promise.all([
     db
       .select({ userId: schema.user.id, name: schema.user.name, email: schema.user.email, role: schema.memberships.role })
       .from(schema.memberships)
@@ -22,6 +23,7 @@ export default async function Settings(props: PageProps) {
     db.select().from(schema.enrollmentCodes).where(and(eq(schema.enrollmentCodes.workspaceId, id), isNull(schema.enrollmentCodes.revokedAt))),
     db.select().from(schema.shareLinks).where(and(eq(schema.shareLinks.workspaceId, id), isNull(schema.shareLinks.revokedAt))),
     dataQuality(id),
+    allowedClaudeEmails(ws),
   ]);
   const now = Date.now();
   return (
@@ -48,6 +50,18 @@ export default async function Settings(props: PageProps) {
             <dt className="text-muted">Account id</dt>
             <dd className="text-xs text-ink-2">Stored only as a salted hash; the Claude login itself never leaves your machines.</dd>
           </dl>
+          <div className="mt-4 border-t border-line pt-4">
+            <div className="mb-2 text-xs font-medium text-ink-2">
+              Claude account e-mail check:{" "}
+              {ws.requireEmailMatch ? <Badge tone="good">on</Badge> : <Badge tone="warn">off</Badge>}
+              {ws.requireEmailMatch && <span className="ml-2 text-muted">approved: {approvedEmails.join(", ") || "none"}</span>}
+            </div>
+            {owner && <ClaudeEmailPolicyForm workspaceId={id} require={ws.requireEmailMatch} extra={ws.extraClaudeEmails} />}
+            <p className="mt-2 text-xs text-muted">
+              Machines send only a one-way hash of their Claude login e-mail; it is compared and discarded, never stored. This stops mistakes and casual
+              misuse; the enrollment code and per-machine token remain the real lock.
+            </p>
+          </div>
           {owner && ws.accountHash && (
             <div className="mt-3">
               <SmallAction label="Re-pin to the next uploading account" run={resetAccountPin.bind(null, id)} confirmText="Use this if you moved to a different Claude account. Continue?" />

@@ -61,15 +61,19 @@ export interface DecodedLogs {
   requests: OtelRequest[];
   errors: OtelError[];
   accountUuids: Set<string>;
+  /** user.email attributes, used only for the e-mail check and never stored. */
+  emails: Set<string>;
   ignored: number;
 }
 
 export function decodeLogs(body: unknown): DecodedLogs {
-  const out: DecodedLogs = { requests: [], errors: [], accountUuids: new Set(), ignored: 0 };
+  const out: DecodedLogs = { requests: [], errors: [], accountUuids: new Set(), emails: new Set(), ignored: 0 };
   const resourceLogs = (body as { resourceLogs?: unknown[] })?.resourceLogs;
   if (!Array.isArray(resourceLogs)) return out;
   for (const rl of resourceLogs as { resource?: { attributes?: KeyValue[] }; scopeLogs?: { logRecords?: unknown[] }[] }[]) {
     const resAttrs = toAttrs(rl.resource?.attributes);
+    const resEmail = s(resAttrs, "user.email", 320);
+    if (resEmail) out.emails.add(resEmail);
     for (const sl of rl.scopeLogs ?? []) {
       for (const rec of (sl.logRecords ?? []) as { timeUnixNano?: string; observedTimeUnixNano?: string; body?: AnyValue; attributes?: KeyValue[] }[]) {
         const a = toAttrs(rec.attributes, new Map(resAttrs));
@@ -77,6 +81,8 @@ export function decodeLogs(body: unknown): DecodedLogs {
         const name = rawName.replace(/^claude_code\./, "");
         const acct = s(a, "user.account_uuid");
         if (acct) out.accountUuids.add(acct);
+        const email = s(a, "user.email", 320);
+        if (email) out.emails.add(email);
         const ts = nanosToDate(rec.timeUnixNano) ?? nanosToDate(rec.observedTimeUnixNano) ?? (s(a, "event.timestamp") ? new Date(s(a, "event.timestamp")!) : new Date());
         const sessionId = s(a, "session.id") ?? "unknown";
 
@@ -140,12 +146,14 @@ const KEPT_METRICS = new Set([
 ]);
 
 /** Keeps delta-temporality sums for the productivity metrics; cumulative points are counted and skipped. */
-export function decodeMetrics(body: unknown): { points: MetricPoint[]; cumulativeSkipped: number; accountUuids: Set<string> } {
-  const out = { points: [] as MetricPoint[], cumulativeSkipped: 0, accountUuids: new Set<string>() };
+export function decodeMetrics(body: unknown): { points: MetricPoint[]; cumulativeSkipped: number; accountUuids: Set<string>; emails: Set<string> } {
+  const out = { points: [] as MetricPoint[], cumulativeSkipped: 0, accountUuids: new Set<string>(), emails: new Set<string>() };
   const rms = (body as { resourceMetrics?: unknown[] })?.resourceMetrics;
   if (!Array.isArray(rms)) return out;
   for (const rm of rms as { resource?: { attributes?: KeyValue[] }; scopeMetrics?: { metrics?: unknown[] }[] }[]) {
     const resAttrs = toAttrs(rm.resource?.attributes);
+    const resEmail = s(resAttrs, "user.email", 320);
+    if (resEmail) out.emails.add(resEmail);
     for (const sm of rm.scopeMetrics ?? []) {
       for (const m of (sm.metrics ?? []) as { name?: string; sum?: { aggregationTemporality?: number | string; dataPoints?: unknown[] } }[]) {
         if (!m.name || !KEPT_METRICS.has(m.name) || !m.sum) continue;
@@ -158,6 +166,8 @@ export function decodeMetrics(body: unknown): { points: MetricPoint[]; cumulativ
           const a = toAttrs(dp.attributes, new Map(resAttrs));
           const acct = s(a, "user.account_uuid");
           if (acct) out.accountUuids.add(acct);
+          const email = s(a, "user.email", 320);
+          if (email) out.emails.add(email);
           const value = dp.asDouble ?? Number(dp.asInt ?? NaN);
           if (!Number.isFinite(value)) continue;
           out.points.push({

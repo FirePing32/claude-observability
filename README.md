@@ -370,6 +370,11 @@ fixture case in `packages/cli/test/collect.test.ts`, and keep the privacy test p
   an account is created and on every sign-in, so removing someone takes effect at their next sign-in.
 - Every page, query and server action checks workspace membership, and owner-only actions check the role.
 - Uploads from a different Claude account than the one the workspace is pinned to are rejected.
+- **Claude account e-mail check** (on by default, Settings → Claude account): machines must be logged into Claude
+  with a workspace owner's e-mail or one on the workspace's extra list. The collector sends only a one-way hash of
+  the e-mail (at login and with every upload), and the server compares it and discards it. Mismatches are refused
+  at login, upload and telemetry; collectors older than 0.1.4 are asked to update. This stops mistakes and casual
+  misuse. It isn't cryptographic proof, because the e-mail is self-reported by the machine.
 - Webhook alert targets must be public `https` URLs (no private or loopback hosts). Slack targets must be on
   `hooks.slack.com`.
 - Security headers are set: CSP, HSTS, `frame-ancestors 'none'`, `nosniff`. CSV exports neutralize spreadsheet

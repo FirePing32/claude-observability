@@ -4,6 +4,7 @@ import type { DeviceContext } from "./device-auth";
 import { authenticateDevice } from "./device-auth";
 import { apiError, rateLimited } from "./http";
 import { checkAccount } from "./ingest";
+import { checkClaudeEmail, EMAIL_MISMATCH_MESSAGE } from "./email-check";
 import { hashAccountUuid } from "./otlp";
 
 /** Shared front half of the OTLP receivers: auth, size, gzip, JSON-only, account check. */
@@ -22,6 +23,14 @@ export async function readOtlp(req: Request): Promise<{ ctx: DeviceContext; body
   } catch {
     return apiError(422, "schema", "Body is not valid OTLP JSON.");
   }
+}
+
+/** Telemetry must come from an approved Claude account e-mail when the workspace checks it. */
+export async function otlpEmailRejection(ctx: DeviceContext, emails: Set<string>, hasData: boolean): Promise<Response | null> {
+  if (!hasData && !emails.size) return null; // nothing to store, nothing to verify
+  const r = await checkClaudeEmail(ctx.workspace, { emails });
+  if (r === "ok") return null;
+  return apiError(403, "email_mismatch", r === "missing" ? "Telemetry has no user.email to verify against this workspace." : EMAIL_MISMATCH_MESSAGE);
 }
 
 export async function otlpAccountOk(ctx: DeviceContext, uuids: Set<string>): Promise<boolean> {

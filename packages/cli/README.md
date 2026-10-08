@@ -62,7 +62,8 @@ service, because services don't read your shell profile.
 
 **Sent:** request ids, timestamps, model names, token counts, effort/speed, subagent, skill and plugin names, the
 project folder's name (or a hash, with `claude-obs config hash-projects on`), the git branch, session titles
-(turn off with `claude-obs config titles off`), error categories, and usage-limit hits.
+(turn off with `claude-obs config titles off`), error categories, usage-limit hits, and a one-way hash of the Claude
+login e-mail so the server can reject machines logged into an unapproved account (compared, never stored).
 
 **Never sent:** prompts, responses, code, file contents, tool input or output, full paths, e-mail addresses, or
 your Claude login.

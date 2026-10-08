@@ -84,6 +84,9 @@ export const workspaces = pgTable("workspaces", {
   plan: text("plan").notNull().default("max5x"),
   planPriceUsd: doublePrecision("plan_price_usd").notNull().default(100),
   detectedTier: text("detected_tier"),
+  /** Only accept uploads from machines whose Claude login e-mail is an owner's e-mail or in extraClaudeEmails. */
+  requireEmailMatch: boolean("require_email_match").notNull().default(true),
+  extraClaudeEmails: text("extra_claude_emails").array().notNull().default(sql`'{}'::text[]`),
   billingDay: integer("billing_day").notNull().default(1),
   timezone: text("timezone").notNull().default("UTC"),
   createdAt: ts("created_at").notNull().defaultNow(),
@@ -172,6 +175,7 @@ export const deviceAuthRequests = pgTable("device_auth_requests", {
   name: text("name").notNull(),
   os: text("os"),
   ip: text("ip"),
+  accountEmailProof: text("account_email_proof"),
   status: text("status", { enum: ["pending", "approved", "denied", "delivered"] }).notNull().default("pending"),
   workspaceId: text("workspace_id"),
   approvedBy: text("approved_by"),

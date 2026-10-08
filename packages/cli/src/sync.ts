@@ -79,6 +79,7 @@ export function collect(config: Config, state: State, salt: string, opts: { all?
     const header: Omit<IngestBatch, "records"> = {
       schemaVersion: SCHEMA_VERSION,
       accountHash: hashAccount(salt, account.accountUuid),
+      accountEmailProof: account.emailProof,
       plan: { rateLimitTier: account.rateLimitTier, seatTier: account.seatTier, billingType: account.billingType },
       device: { os: `${process.platform}-${process.arch}`, ccVersions: [...acc.ccVersions].slice(0, 50) },
       parser: { version: PARSER_VERSION, unknownTypes: acc.unknownTypes, malformedLines: acc.malformedLines },
@@ -161,7 +162,11 @@ export async function flushOutbox(creds: Credentials, log: Logger): Promise<Flus
       log.debug(`upload deferred (${out.lastError}); will retry`);
       break; // keep order; retry later
     }
-    log.warn(`batch rejected (${out.lastError}); moved to quarantine`);
+    log.warn(
+      r.error === "email_mismatch"
+        ? `upload refused: this machine's Claude login e-mail isn't approved for the workspace (${r.message}); batch moved to quarantine`
+        : `batch rejected (${out.lastError}); moved to quarantine`,
+    );
     quarantine(file, out.lastError);
   }
   out.pending = outboxFiles().length;

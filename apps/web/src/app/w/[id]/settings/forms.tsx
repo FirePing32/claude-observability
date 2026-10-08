@@ -6,6 +6,7 @@ import {
   createShareLink,
   deleteWorkspace,
   inviteMember,
+  updateClaudeEmailPolicy,
   renameDevice,
   revokeDevice,
 } from "@/app/actions";
@@ -142,6 +143,31 @@ export function ShareLinkButton({ workspaceId }: { workspaceId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+export function ClaudeEmailPolicyForm({ workspaceId, require, extra }: { workspaceId: string; require: boolean; extra: string[] }) {
+  const [state, run, pending] = useActionState(updateClaudeEmailPolicy.bind(null, workspaceId), null);
+  return (
+    <form action={run} className="space-y-3">
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" name="requireEmailMatch" defaultChecked={require} className="mt-1" />
+        <span>
+          Only accept data from machines logged into Claude with an approved e-mail
+          <span className="block text-xs text-muted">Approved: every workspace owner&apos;s sign-in e-mail, plus the list below.</span>
+        </span>
+      </label>
+      <label className="block">
+        <span className="text-xs text-ink-2">Extra approved Claude account e-mails (comma or new line separated)</span>
+        <textarea name="extraClaudeEmails" rows={2} defaultValue={extra.join("\n")} className={inputCls} placeholder="claude-account@company.com" />
+      </label>
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" disabled={pending}>
+          Save
+        </Button>
+        {(state?.error || state?.message) && <span className={`text-sm ${state.error ? "text-bad" : "text-good"}`}>{state.error ?? state.message}</span>}
+      </div>
+    </form>
   );
 }
 

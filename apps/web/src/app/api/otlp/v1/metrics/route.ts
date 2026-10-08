@@ -1,13 +1,15 @@
 import { db, schema } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { decodeMetrics } from "@/lib/otlp";
-import { otlpAccountOk, readOtlp } from "@/lib/otlp-route";
+import { otlpAccountOk, otlpEmailRejection, readOtlp } from "@/lib/otlp-route";
 
 export async function POST(req: Request) {
   const r = await readOtlp(req);
   if (r instanceof Response) return r;
   const { ctx, body } = r;
   const d = decodeMetrics(body);
+  const emailRejected = await otlpEmailRejection(ctx, d.emails, d.points.length > 0);
+  if (emailRejected) return emailRejected;
   if (!(await otlpAccountOk(ctx, d.accountUuids)))
     return apiError(409, "account_mismatch", "Telemetry is from a different Claude account than this workspace tracks.");
   if (d.points.length) {

@@ -9,6 +9,7 @@ import { ALERT_TYPES, sendTestAlert, validateTarget } from "@/lib/alerts";
 import { db, schema } from "@/lib/db";
 import { digestConfigured, generateDigest } from "@/lib/digest";
 import { isAllowlisted } from "@/lib/access";
+import { checkClaudeEmail } from "@/lib/email-check";
 import { requireMember, requireUser } from "@/lib/session";
 import { newDeviceToken, newHumanCode, newId, newSalt, normalizeCode, sha256 } from "@/lib/tokens";
 
@@ -170,6 +171,10 @@ export async function decideDevice(_: ActionState, form: FormData): Promise<Acti
     return { ok: true, message: "Denied. The CLI will stop waiting." };
   }
   const { workspace } = await requireMember(wsId, "owner");
+  const email = await checkClaudeEmail(workspace, { proof: req.accountEmailProof });
+  if (email === "mismatch")
+    return { error: "That machine is logged into Claude with an e-mail that isn't approved for this workspace. Add it under Settings → Claude account, or log in to Claude there with an approved account." };
+  if (email === "missing") return { error: "That machine runs an older claude-obs. Update it (npm install -g claude-obs@latest) and run claude-obs login again." };
   const token = newDeviceToken();
   const deviceId = newId("dev");
   await db.insert(schema.devices).values({ id: deviceId, workspaceId: workspace.id, name: req.name, os: req.os, tokenHash: sha256(token), enrolledVia: "browser" });
@@ -265,6 +270,24 @@ export async function revokeShareLink(wsId: string, id: string) {
   await requireMember(wsId, "owner");
   await db.update(schema.shareLinks).set({ revokedAt: new Date() }).where(and(eq(schema.shareLinks.id, id), eq(schema.shareLinks.workspaceId, wsId)));
   revalidatePath(`/w/${wsId}/settings`);
+}
+
+export async function updateClaudeEmailPolicy(wsId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  await requireMember(wsId, "owner");
+  const require = form.get("requireEmailMatch") === "on";
+  const raw = String(form.get("extraClaudeEmails") ?? "")
+    .split(/[\s,;]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  const bad = raw.filter((e) => !z.email().safeParse(e).success);
+  if (bad.length) return { error: `Not valid e-mail addresses: ${bad.join(", ")}` };
+  if (raw.length > 50) return { error: "At most 50 extra e-mails." };
+  await db
+    .update(schema.workspaces)
+    .set({ requireEmailMatch: require, extraClaudeEmails: [...new Set(raw)] })
+    .where(eq(schema.workspaces.id, wsId));
+  revalidatePath(`/w/${wsId}/settings`);
+  return { ok: true, message: "Saved." };
 }
 
 export async function resetAccountPin(wsId: string) {

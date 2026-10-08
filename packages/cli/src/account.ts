@@ -1,4 +1,5 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
+import { EMAIL_PROOF_PREFIX } from "@claude-obs/shared";
 import fs from "node:fs";
 import path from "node:path";
 import { claudeJsonCandidates } from "./paths";
@@ -6,6 +7,10 @@ import { claudeJsonCandidates } from "./paths";
 export interface AccountInfo {
   /** Only ever used locally to compute a salted hash; never uploaded or logged. */
   accountUuid: string | null;
+  /** Used only locally: for the one-way proof below and for error messages on this machine. Never uploaded. */
+  email: string | null;
+  /** sha256(prefix + lowercased e-mail); lets the server check the account e-mail without receiving it. */
+  emailProof: string | null;
   rateLimitTier: string | null;
   seatTier: string | null;
   billingType: string | null;
@@ -25,8 +30,11 @@ export function readAccount(root: string): AccountInfo {
     }
     try {
       const oa = (JSON.parse(raw) as { oauthAccount?: Record<string, unknown> }).oauthAccount ?? {};
+      const email = str(oa.emailAddress);
       return {
         accountUuid: str(oa.accountUuid),
+        email,
+        emailProof: email ? emailProof(email) : null,
         rateLimitTier: str(oa.organizationRateLimitTier) ?? str(oa.userRateLimitTier),
         seatTier: str(oa.seatTier),
         billingType: str(oa.billingType),
@@ -36,7 +44,11 @@ export function readAccount(root: string): AccountInfo {
       continue;
     }
   }
-  return { accountUuid: null, rateLimitTier: null, seatTier: null, billingType: null, source: null };
+  return { accountUuid: null, email: null, emailProof: null, rateLimitTier: null, seatTier: null, billingType: null, source: null };
+}
+
+export function emailProof(email: string): string {
+  return createHash("sha256").update(EMAIL_PROOF_PREFIX + email.trim().toLowerCase()).digest("hex");
 }
 
 export function hashAccount(salt: string, accountUuid: string): string {
