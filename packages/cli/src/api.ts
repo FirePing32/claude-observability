@@ -1,5 +1,6 @@
 import { gzipSync } from "node:zlib";
 import {
+  DEFAULT_COLLECTOR_SERVER,
   apiError,
   devicePollResponse,
   deviceStartResponse,
@@ -12,7 +13,7 @@ import {
 import type { z } from "zod";
 import { CLI_VERSION } from "./paths";
 
-export const DEFAULT_SERVER = process.env.CLAUDE_OBS_SERVER || "https://claude-observability.vercel.app";
+export const DEFAULT_SERVER = process.env.CLAUDE_OBS_SERVER || DEFAULT_COLLECTOR_SERVER;
 
 const CERT_ERRORS = new Set([
   "SELF_SIGNED_CERT_IN_CHAIN",

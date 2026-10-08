@@ -13,7 +13,7 @@ import {
 import { CommandBlock, CopyButton } from "@/components/client";
 import { Button, inputCls } from "@/components/ui";
 
-export function EnrollCodeForm({ workspaceId, server }: { workspaceId: string; server?: string }) {
+export function EnrollCodeForm({ workspaceId, serverFlag }: { workspaceId: string; serverFlag?: string }) {
   const [state, run, pending] = useActionState(createEnrollmentCode.bind(null, workspaceId), null);
   return (
     <div>
@@ -40,9 +40,9 @@ export function EnrollCodeForm({ workspaceId, server }: { workspaceId: string; s
             <CopyButton text={state.secret} />
           </div>
           <div className="mt-1 text-xs text-muted">{state.message}</div>
-          {server && (
+          {serverFlag !== undefined && (
             <div className="mt-3">
-              <CommandBlock command={`claude-obs login --code ${state.secret} --server ${server}`} />
+              <CommandBlock command={`claude-obs login --code ${state.secret}${serverFlag}`} />
             </div>
           )}
         </div>

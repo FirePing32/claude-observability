@@ -3,6 +3,9 @@ import { z } from "zod";
 /** Wire format between the claude-obs collector and the ingest endpoint. See docs/claude-obs.md §6. */
 export const SCHEMA_VERSION = 1;
 
+/** The collector's built-in server; the dashboard omits `--server` from commands when it is this one. */
+export const DEFAULT_COLLECTOR_SERVER = "https://claude-observability.vercel.app";
+
 const count = z.number().int().nonnegative();
 const isoTs = z.iso.datetime({ offset: true });
 const id = z.string().min(1).max(200);

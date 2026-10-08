@@ -1,3 +1,4 @@
+import { DEFAULT_COLLECTOR_SERVER } from "@claude-obs/shared";
 import { headers } from "next/headers";
 import { CommandBlock, WaitForData } from "@/components/client";
 import { Card, Code, PageHeader } from "@/components/ui";
@@ -10,18 +11,20 @@ export default async function Setup(props: PageProps) {
   const h = await headers();
   const origin = process.env.BETTER_AUTH_URL ?? `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const dq = await dataQuality(id);
+  // The collector already defaults to the production URL; only spell out --server for other deployments.
+  const serverFlag = origin.replace(/\/+$/, "") === DEFAULT_COLLECTOR_SERVER ? "" : ` --server ${origin}`;
   return (
     <>
       <PageHeader title="Connect machines" sub="Do this once on every computer where anyone runs Claude Code with this account." />
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
           <Card title="1 · Get an enrollment code" sub="One code can enroll several machines; send it to whoever runs Claude Code on them.">
-            {role === "owner" ? <EnrollCodeForm workspaceId={id} server={origin} /> : <p className="text-sm text-ink-2">Ask a workspace owner for a code.</p>}
+            {role === "owner" ? <EnrollCodeForm workspaceId={id} serverFlag={serverFlag} /> : <p className="text-sm text-ink-2">Ask a workspace owner for a code.</p>}
           </Card>
           <Card title="2 · On each machine" sub="Needs Node 20+. The collector reads ~/.claude locally and uploads usage numbers only.">
             <div className="space-y-2">
               <CommandBlock command="npm install -g claude-obs" />
-              <CommandBlock command={`claude-obs login --code XXXX-XXXX --server ${origin}`} />
+              <CommandBlock command={`claude-obs login --code XXXX-XXXX${serverFlag}`} />
               <CommandBlock command="claude-obs sync" />
               <CommandBlock command="claude-obs install-agent" />
             </div>
