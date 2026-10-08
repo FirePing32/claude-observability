@@ -7,6 +7,34 @@ import { files } from "./paths";
 
 const LABEL = "com.claude-obs.agent";
 
+/**
+ * Background services don't load your shell profile, so carry over the settings the
+ * collector needs to reach the server: custom CA certificates (corporate TLS inspection),
+ * proxies, and a non-default Claude config folder.
+ */
+const PASSTHROUGH_ENV = [
+  "CLAUDE_CONFIG_DIR",
+  "CLAUDE_OBS_HOME",
+  "CLAUDE_OBS_SERVER",
+  "NODE_EXTRA_CA_CERTS",
+  "NODE_USE_SYSTEM_CA",
+  "HTTPS_PROXY",
+  "https_proxy",
+  "HTTP_PROXY",
+  "http_proxy",
+  "NO_PROXY",
+  "no_proxy",
+];
+
+export function agentEnv(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of PASSTHROUGH_ENV) {
+    const v = process.env[k];
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
 export interface AgentPlan {
   kind: "launchd" | "systemd" | "schtasks";
   file: string | null;
@@ -30,7 +58,7 @@ const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 
 export function agentPlan(): AgentPlan {
   const args = programArgs();
-  const env = process.env.CLAUDE_CONFIG_DIR ? { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR } : {};
+  const env = agentEnv();
   if (process.platform === "darwin") {
     const file = path.join(os.homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
     const log = path.join(files.logDir(), "launchd.log");

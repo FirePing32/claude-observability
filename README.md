@@ -217,6 +217,12 @@ Stored in `~/.config/claude-obs/` (`%APPDATA%\claude-obs` on Windows; override w
 | `CLAUDE_OBS_SERVER` | Default server URL |
 | `CLAUDE_OBS_HOME` | Where the collector keeps its files |
 | `CLAUDE_CONFIG_DIR` | Claude Code's config folder, if not `~/.claude` |
+| `CLAUDE_OBS_SYSTEM_CA` | `0` turns off automatic trust of the OS certificate store |
+
+**Corporate networks.** Security agents such as Netskope or Zscaler re-sign HTTPS traffic with a company
+certificate. The collector trusts the operating system's certificate store automatically, so this works with no
+setup on macOS and Linux (and on Windows with Node 22.19+). Details and manual fallbacks are in the
+[collector README](packages/cli/README.md#corporate-networks-netskope-zscaler-proxies).
 
 Full design: [docs/claude-obs.md](docs/claude-obs.md).
 

@@ -14,6 +14,31 @@ import { CLI_VERSION } from "./paths";
 
 export const DEFAULT_SERVER = process.env.CLAUDE_OBS_SERVER || "https://claude-observability.vercel.app";
 
+const CERT_ERRORS = new Set([
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "CERT_UNTRUSTED",
+]);
+
+/** Turn Node's opaque "fetch failed" into the underlying cause, with a fix for TLS-inspecting networks. */
+export function describeNetworkError(e: unknown): string {
+  const err = e as Error & { cause?: { code?: string; message?: string } };
+  const code = err.cause?.code;
+  if (code && CERT_ERRORS.has(code)) {
+    return (
+      `${code}: this network intercepts HTTPS (a corporate proxy or security agent such as Netskope or Zscaler), ` +
+      `and Node.js doesn't trust its certificate. Export your company's root certificate and set NODE_EXTRA_CA_CERTS to it ` +
+      `(on Node 22.15+ you can instead set NODE_USE_SYSTEM_CA=1). See "Corporate networks" in the claude-obs README.`
+    );
+  }
+  if (code === "ENOTFOUND") return "the server name doesn't resolve (check the URL and your internet connection)";
+  if (code === "ECONNREFUSED") return "connection refused (is the server URL right?)";
+  return code ? `${err.message} (${code}${err.cause?.message ? `: ${err.cause.message}` : ""})` : err.message;
+}
+
 export type UploadOutcome =
   | { ok: true; res: IngestResponse }
   | { ok: false; retryable: boolean; status: number; error: string; message: string; retryAfterSec?: number };
@@ -61,7 +86,7 @@ export async function uploadBatch(server: string, token: string, batch: IngestBa
       signal: AbortSignal.timeout(30_000),
     });
   } catch (e) {
-    return { ok: false, retryable: true, status: 0, error: "network", message: (e as Error).message };
+    return { ok: false, retryable: true, status: 0, error: "network", message: describeNetworkError(e) };
   }
   if (!res.ok) return failure(res);
   const parsed = ingestResponse.safeParse(await res.json().catch(() => null));
@@ -84,7 +109,7 @@ async function call<T extends z.ZodType>(
       signal: AbortSignal.timeout(20_000),
     });
   } catch (e) {
-    throw new Error(`Cannot reach ${server}: ${(e as Error).message}`);
+    throw new Error(`Cannot reach ${server}: ${describeNetworkError(e)}`);
   }
   if (!res.ok) {
     const f = await failure(res);

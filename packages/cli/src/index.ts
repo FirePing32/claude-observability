@@ -3,8 +3,9 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { computeValueUsd, detectPlan, modelLabel, PLANS, type UsageRecord } from "@claude-obs/shared";
 import { readAccount } from "./account";
-import { agentInstalled, agentPlan, installAgent, isEphemeralInstall, uninstallAgent } from "./agent";
-import { api, DEFAULT_SERVER } from "./api";
+import { agentEnv, agentInstalled, agentPlan, installAgent, isEphemeralInstall, uninstallAgent } from "./agent";
+import { api, DEFAULT_SERVER, describeNetworkError } from "./api";
+import { describeCaMode, useSystemCertificates, type CaMode } from "./ca";
 import { consoleLogger, fileLogger } from "./log";
 import { acquireLock, lockHolder } from "./lock";
 import { installOtel, otelEnv, uninstallOtel } from "./otel";
@@ -265,6 +266,8 @@ async function main(): Promise<void> {
       }
       const p = installAgent();
       console.log(`✓ Background agent installed (${p.kind}${p.file ? `: ${p.file}` : ""}). Logs: ${path.join(files.logDir(), "agent.log")}`);
+      const carried = Object.keys(agentEnv());
+      if (carried.length) console.log(`  Carried over from this shell: ${carried.join(", ")}`);
       return;
     }
 
@@ -357,12 +360,15 @@ async function main(): Promise<void> {
       const ok = (b: boolean) => (b ? "ok " : "FAIL");
       const major = Number(process.versions.node.split(".")[0]);
       console.log(`${ok(major >= 20)} node ${process.version} (need ≥ 20)`);
+      console.log(`${ok(caMode !== "unavailable")} certificates: ${describeCaMode(caMode)}`);
       const creds = loadCredentials();
       console.log(`${ok(!!creds)} credentials ${creds ? `(${creds.server})` : "missing: run claude-obs login"}`);
       if (creds) {
         try {
           const t0 = Date.now();
-          const res = await fetch(new URL("/api/health", creds.server), { signal: AbortSignal.timeout(10_000) });
+          const res = await fetch(new URL("/api/health", creds.server), { signal: AbortSignal.timeout(10_000) }).catch((e: unknown) => {
+            throw new Error(describeNetworkError(e));
+          });
           const date = Date.parse(res.headers.get("date") ?? "");
           const skew = Number.isFinite(date) ? Math.round((Date.now() - date) / 1000) : null;
           console.log(`${ok(res.ok)} server reachable in ${Date.now() - t0} ms${skew !== null && Math.abs(skew) > 120 ? `; clock skew ${skew}s` : ""}`);
@@ -395,8 +401,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e: Error) => {
-  log.error(e.message);
-  if (!flags.agent) console.error(`error: ${e.message}`);
-  process.exit(1);
-});
+// Trust the OS certificate store first (corporate TLS inspection), possibly by relaunching once.
+let caMode: CaMode = "unavailable";
+const ca = useSystemCertificates();
+if (ca !== "relaunched") {
+  caMode = ca.mode;
+  main().catch((e: Error) => {
+    log.error(e.message); // console logger in a terminal, file logger in the background agent
+    process.exit(1);
+  });
+}

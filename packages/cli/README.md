@@ -32,6 +32,32 @@ uploads **usage numbers only** to your Claude Observability dashboard. It covers
 
 Requires Node.js 20 or later.
 
+## Corporate networks (Netskope, Zscaler, proxies)
+
+Networks that inspect HTTPS re-sign traffic with a company certificate. Your browser trusts it because it's in the
+operating system's certificate store; Node.js normally doesn't. **claude-obs trusts the operating system's
+certificates automatically**:
+
+- On Node 22.19+ / 24.5+, it loads them in-process.
+- On older Node (macOS and Linux), it uses the system bundle and relaunches itself once. On macOS the bundle is the
+  System keychain plus Apple's roots, cached in `~/.config/claude-obs/system-ca.pem` and refreshed weekly.
+
+`claude-obs doctor` shows which mode is in use. To turn this off, set `CLAUDE_OBS_SYSTEM_CA=0`.
+
+If it still fails (for example on Windows with Node older than 22.19), use one of these:
+- Node 22.15+ with `NODE_USE_SYSTEM_CA=1` in your shell profile.
+- Export the company root certificate and point Node at it. On macOS, replace `<issuer>` with part of the
+  certificate's name, for example `goskope.com` for Netskope:
+  ```bash
+  mkdir -p ~/.certs && security find-certificate -a -p -c "<issuer>" /Library/Keychains/System.keychain > ~/.certs/corp-ca.pem
+  ```
+  ```bash
+  echo 'export NODE_EXTRA_CA_CERTS="$HOME/.certs/corp-ca.pem"' >> ~/.zshrc
+  ```
+
+`install-agent` copies `NODE_EXTRA_CA_CERTS`, `NODE_USE_SYSTEM_CA` and `HTTPS_PROXY`/`NO_PROXY` into the background
+service, because services don't read your shell profile.
+
 ## What it sends
 
 **Sent:** request ids, timestamps, model names, token counts, effort/speed, subagent, skill and plugin names, the
