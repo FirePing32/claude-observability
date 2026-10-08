@@ -16,7 +16,7 @@ This is a web app deployed on Vercel. You sign in with Google, link the machines
 | Ingest | Transcript batches, OTLP/HTTP JSON logs and metrics, account-hash pinning, version/size/rate guards, cross-machine and cross-source merge. |
 | Auth & tenancy | Google sign-in, workspaces = Claude accounts, owner/viewer invites, enrollment codes, browser device approval, revocation, share links. |
 | Dashboard | Overview (live block, plan value, completeness), Sessions + detail, Models, Projects, Limits (blocks, learned limit, heatmap, manual marks), Plan value, Insights (rules + AI digest), Alerts (Slack/webhook/e-mail), Settings, CSV export. Light and dark. |
-| Jobs | Vercel Cron: alerts (15 min), digest (weekly), retention (daily). |
+| Jobs | Vercel Cron on the Hobby plan: alert sweep (daily), digest (weekly), retention (daily). Alerts also run after every upload. |
 | Not done (Phase 4) | OTLP protobuf, Postgres RLS, standalone collector binaries, org Admin API / Enterprise Analytics connectors, Playwright E2E, load test. |
 
 **Changed from the plan while building:**
@@ -99,7 +99,7 @@ flowchart LR
 | Auth | **Better Auth, Google provider**, database sessions (Drizzle adapter) | Scopes are `openid email profile` only, which are non-sensitive, so Google review is light. |
 | DB | **Neon Postgres** (Vercel Marketplace) + **Drizzle** | Per-user volume is small (thousands of requests a month). Postgres with rollups is plenty, and branching suits preview deploys. |
 | Cache / live | **Upstash Redis** | Ingest rate limiting, dashboard query cache, and the current 5-hour block's running state. |
-| Jobs | **Vercel Cron** (Pro plan) | Rollups, block rebuild, insights and alerts. A queue (QStash/Inngest) is only needed once user count grows. |
+| Jobs | **Vercel Cron** (Hobby plan: daily jobs) | Alert sweep, weekly digest, retention. Alerts also run after each upload. Move to Pro for sub-daily sweeps; a queue (QStash/Inngest) is only needed once user count grows. |
 | UI | Tailwind + **shadcn/ui**, **Recharts**, **TanStack Table**, `nuqs` (URL state) | |
 | CLI | Node + TypeScript, published to npm as `claude-obs` | Runs anywhere Claude Code runs (Node is already present). |
 | Validation | **Zod** shared by web and CLI (`packages/shared`) | One schema for the upload contract. |
@@ -428,7 +428,7 @@ Global UX:
   - Daily value above Y.
   - Error spike.
   - A device is silent for more than N days.
-- **Evaluation**: block alerts run on each ingest. That's near-live with `--watch` or OpenTelemetry, and best-effort otherwise. The rest are evaluated by a 15-minute cron. Fired alerts are deduplicated per rule and block or period.
+- **Evaluation**: all alert rules run after each ingest. That's near-live with `--watch` or OpenTelemetry, and best-effort otherwise. The rest are evaluated by a daily cron. Fired alerts are deduplicated per rule and block or period.
 
 ---
 

@@ -240,8 +240,10 @@ Short version; [PLAN.md](PLAN.md) has the design.
      region to the database region.
    - Set the environment variables from the table below, then redeploy.
    - `vercel-build` runs migrations, then `next build`.
-4. **Cron:** `apps/web/vercel.json` schedules alerts every 15 min, the digest weekly and retention daily.
-   Sub-daily cron requires the Vercel **Pro** plan; on Hobby, change the alerts schedule to daily.
+4. **Cron:** `apps/web/vercel.json` schedules the alert sweep daily (09:00 UTC), the digest weekly (Monday 08:00 UTC)
+   and retention daily. These fit the Vercel **Hobby** plan. Hobby runs each job some time within the scheduled hour.
+   Alerts also run after every upload, so a daily sweep only matters for "machine went silent" alerts. On **Pro**
+   you can tighten the alert sweep to `*/15 * * * *`.
 5. **Collector:**
    - Set your domain as the default in `packages/cli/src/api.ts`.
    - Publish with `npm publish -w claude-obs`. The `prepublishOnly` script runs typecheck, tests and the build.

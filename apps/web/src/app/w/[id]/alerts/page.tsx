@@ -15,7 +15,7 @@ export default async function Alerts(props: PageProps) {
   const owner = role === "owner";
   return (
     <>
-      <PageHeader title="Alerts" sub="Checked after every upload and every 15 minutes; each block or period alerts once." />
+      <PageHeader title="Alerts" sub="Checked after every upload, plus a daily sweep; each block or period alerts once." />
       {owner && (
         <Card title="New alert">
           <AlertForm workspaceId={id} types={Object.fromEntries(Object.entries(ALERT_TYPES).map(([k, v]) => [k, v.label]))} />
