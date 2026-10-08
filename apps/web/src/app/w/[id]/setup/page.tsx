@@ -4,10 +4,11 @@ import { CommandBlock, WaitForData } from "@/components/client";
 import { Card, Code, PageHeader } from "@/components/ui";
 import { pageContext, type PageProps } from "@/lib/page";
 import { dataQuality } from "@/lib/queries";
+import { EnrollmentCodes } from "../settings/codes";
 import { EnrollCodeForm } from "../settings/forms";
 
 export default async function Setup(props: PageProps) {
-  const { id, role } = await pageContext(props);
+  const { id, role, tz } = await pageContext(props);
   const h = await headers();
   const origin = process.env.BETTER_AUTH_URL ?? `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   const dq = await dataQuality(id);
@@ -59,6 +60,7 @@ export default async function Setup(props: PageProps) {
           </Card>
         </div>
       </div>
+      <EnrollmentCodes workspaceId={id} tz={tz} owner={role === "owner"} />
     </>
   );
 }

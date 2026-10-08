@@ -14,7 +14,7 @@ This is a web app deployed on Vercel. You sign in with Google, link the machines
 |---|---|
 | Collector `claude-obs` | Parser, dedup, privacy, outbox, `sync`, `--watch`, `install-agent` (launchd/systemd/schtasks), `status`, `doctor`, `otel --install`, `config-dirs`, `logout`. 18 tests. |
 | Ingest | Transcript batches, OTLP/HTTP JSON logs and metrics, account-hash pinning, version/size/rate guards, cross-machine and cross-source merge. |
-| Auth & tenancy | Google sign-in, workspaces = Claude accounts, owner/viewer invites, enrollment codes, browser device approval, revocation, share links. |
+| Auth & tenancy | Google sign-in restricted to an e-mail allowlist of leads (no invites, no share links), workspaces = Claude accounts, enrollment codes, browser device approval, revocation, Claude-account e-mail check. |
 | Dashboard | Overview (live block, plan value, completeness), Sessions + detail, Models, Projects, Limits (blocks, learned limit, heatmap, manual marks), Plan value, Insights (rules + AI digest), Alerts (Slack/webhook/e-mail), Settings, CSV export. Light and dark. |
 | Jobs | Vercel Cron on the Hobby plan: alert sweep (daily), digest (weekly), retention (daily). Alerts also run after every upload. |
 | Not done (Phase 4) | OTLP protobuf, Postgres RLS, standalone collector binaries, org Admin API / Enterprise Analytics connectors, Playwright E2E, load test. |

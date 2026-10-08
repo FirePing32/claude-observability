@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { LegalFooter } from "@/components/legal";
 import { redirect } from "next/navigation";
-import { acceptInvites, getUser, listWorkspaces } from "@/lib/session";
+import { getUser, listWorkspaces } from "@/lib/session";
 
 export default async function Home() {
   const user = await getUser();
   if (user) {
-    await acceptInvites(user);
     const ws = await listWorkspaces(user.id);
     redirect(ws[0] ? `/w/${ws[0].id}` : "/onboarding");
   }

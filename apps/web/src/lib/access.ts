@@ -1,6 +1,4 @@
 import "server-only";
-import { and, eq, isNull } from "drizzle-orm";
-import { db, schema } from "./db";
 
 /**
  * Who may use the app. ALLOWED_EMAILS is a comma-separated list of e-mails and/or
@@ -22,23 +20,9 @@ export function isAllowlisted(email: string): boolean {
   return entries.some((x) => x === e || (x.startsWith("@") && x === domain));
 }
 
-/** Leads, plus anyone a workspace owner has invited or added (view-only access to those workspaces). */
+/** Who may sign in: only allowlisted leads. (Inviting other people was removed on purpose.) */
 export async function mayUseApp(email: string): Promise<boolean> {
-  if (isAllowlisted(email)) return true;
-  const e = email.trim().toLowerCase();
-  const [invite] = await db
-    .select({ id: schema.invites.id })
-    .from(schema.invites)
-    .where(and(eq(schema.invites.email, e), isNull(schema.invites.acceptedAt)))
-    .limit(1);
-  if (invite) return true;
-  const [member] = await db
-    .select({ id: schema.memberships.workspaceId })
-    .from(schema.memberships)
-    .innerJoin(schema.user, eq(schema.user.id, schema.memberships.userId))
-    .where(eq(schema.user.email, e))
-    .limit(1);
-  return Boolean(member);
+  return isAllowlisted(email);
 }
 
 export const NOT_ALLOWED = "not_allowed";

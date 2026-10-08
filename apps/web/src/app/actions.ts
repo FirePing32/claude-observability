@@ -35,7 +35,7 @@ const workspaceForm = z.object({
 
 export async function createWorkspace(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
-  if (!isAllowlisted(user.email)) return { error: "Only approved leads can create workspaces. Ask an owner to invite you instead." };
+  if (!isAllowlisted(user.email)) return { error: "Only approved leads can create workspaces." };
   const p = workspaceForm.safeParse(Object.fromEntries(form));
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Check the form." };
   const id = newId("ws");
@@ -77,10 +77,11 @@ export async function createEnrollmentCode(wsId: string, _: ActionState, form: F
   const days = Math.min(30, Math.max(1, Number(form.get("days") ?? 7) || 7));
   const label = String(form.get("label") ?? "").slice(0, 80) || null;
   const code = newHumanCode();
+  const codeHash = sha256(normalizeCode(code));
   await db.insert(schema.enrollmentCodes).values({
     id: newId("enr"),
     workspaceId: wsId,
-    codeHash: sha256(normalizeCode(code)),
+    codeHash,
     label,
     maxUses,
     expiresAt: new Date(Date.now() + days * 86_400_000),
@@ -88,7 +89,11 @@ export async function createEnrollmentCode(wsId: string, _: ActionState, form: F
   });
   revalidatePath(`/w/${wsId}/settings`);
   revalidatePath(`/w/${wsId}/setup`);
-  return { ok: true, secret: code, message: `Valid for ${maxUses} machine${maxUses > 1 ? "s" : ""}, ${days} day${days > 1 ? "s" : ""}.` };
+  return {
+    ok: true,
+    secret: code,
+    message: `Fingerprint #${codeHash.slice(0, 8)} · valid for ${maxUses} machine${maxUses > 1 ? "s" : ""}, ${days} day${days > 1 ? "s" : ""}.`,
+  };
 }
 
 export async function revokeEnrollmentCode(wsId: string, codeId: string) {
@@ -114,44 +119,6 @@ export async function revokeDevice(wsId: string, deviceId: string) {
     .update(schema.devices)
     .set({ revokedAt: new Date() })
     .where(and(eq(schema.devices.id, deviceId), eq(schema.devices.workspaceId, wsId)));
-  revalidatePath(`/w/${wsId}/settings`);
-}
-
-export async function inviteMember(wsId: string, _: ActionState, form: FormData): Promise<ActionState> {
-  const { user } = await requireMember(wsId, "owner");
-  const email = z.email().safeParse(String(form.get("email") ?? "").trim().toLowerCase());
-  const role = form.get("role") === "owner" ? "owner" : "viewer";
-  if (!email.success) return { error: "Enter a valid Google e-mail address." };
-  await db
-    .insert(schema.invites)
-    .values({ id: newId("inv"), workspaceId: wsId, email: email.data, role, createdBy: user.id })
-    .onConflictDoUpdate({ target: [schema.invites.workspaceId, schema.invites.email], set: { role, acceptedAt: null } });
-  // if that person already has an account, add them right away
-  const [existing] = await db.select().from(schema.user).where(eq(schema.user.email, email.data));
-  if (existing) {
-    await db.insert(schema.memberships).values({ workspaceId: wsId, userId: existing.id, role }).onConflictDoUpdate({
-      target: [schema.memberships.workspaceId, schema.memberships.userId],
-      set: { role },
-    });
-    await db.update(schema.invites).set({ acceptedAt: new Date() }).where(and(eq(schema.invites.workspaceId, wsId), eq(schema.invites.email, email.data)));
-  }
-  revalidatePath(`/w/${wsId}/settings`);
-  return { ok: true, message: existing ? `${email.data} added.` : `Invited ${email.data}. They get access when they sign in with Google.` };
-}
-
-export async function removeMember(wsId: string, userId: string) {
-  const { workspace, user } = await requireMember(wsId, "owner");
-  if (userId === workspace.ownerId || userId === user.id) return;
-  await db.delete(schema.memberships).where(and(eq(schema.memberships.workspaceId, wsId), eq(schema.memberships.userId, userId)));
-  // drop their invite too, so a removed viewer can't sign back in through it
-  const [removed] = await db.select({ email: schema.user.email }).from(schema.user).where(eq(schema.user.id, userId));
-  if (removed) await db.delete(schema.invites).where(and(eq(schema.invites.workspaceId, wsId), eq(schema.invites.email, removed.email.toLowerCase())));
-  revalidatePath(`/w/${wsId}/settings`);
-}
-
-export async function revokeInvite(wsId: string, inviteId: string) {
-  await requireMember(wsId, "owner");
-  await db.delete(schema.invites).where(and(eq(schema.invites.id, inviteId), eq(schema.invites.workspaceId, wsId)));
   revalidatePath(`/w/${wsId}/settings`);
 }
 
@@ -250,26 +217,6 @@ export async function generateDigestNow(wsId: string): Promise<ActionState> {
   }
   revalidatePath(`/w/${wsId}/insights`);
   return { ok: true, message: "Digest generated." };
-}
-
-export async function createShareLink(wsId: string): Promise<ActionState> {
-  const { user } = await requireMember(wsId, "owner");
-  const token = newDeviceToken().replace(/^cob_/, "shr_");
-  await db.insert(schema.shareLinks).values({
-    id: newId("shl"),
-    workspaceId: wsId,
-    tokenHash: sha256(token),
-    createdBy: user.id,
-    expiresAt: new Date(Date.now() + 30 * 86_400_000),
-  });
-  revalidatePath(`/w/${wsId}/settings`);
-  return { ok: true, secret: `/share/${token}`, message: "Read-only overview link, valid for 30 days." };
-}
-
-export async function revokeShareLink(wsId: string, id: string) {
-  await requireMember(wsId, "owner");
-  await db.update(schema.shareLinks).set({ revokedAt: new Date() }).where(and(eq(schema.shareLinks.id, id), eq(schema.shareLinks.workspaceId, wsId)));
-  revalidatePath(`/w/${wsId}/settings`);
 }
 
 export async function updateClaudeEmailPolicy(wsId: string, _: ActionState, form: FormData): Promise<ActionState> {

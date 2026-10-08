@@ -10,7 +10,7 @@ import type { Logger } from "./log";
 import { Accumulator, parseLine } from "./parse";
 import { PARSER_VERSION, files } from "./paths";
 import { readNewLines } from "./reader";
-import { loadState, readJson, saveState, writeJsonAtomic, type Config, type Credentials, type FileState, type State } from "./store";
+import { loadConfig, loadState, readJson, saveState, writeJsonAtomic, type Config, type Credentials, type FileState, type State } from "./store";
 
 export interface RootResult {
   root: string;
@@ -131,14 +131,37 @@ export interface FlushResult {
   lastError: string | null;
 }
 
+/**
+ * Batches queued by an older collector may lack fields the server now requires (the e-mail proof, added
+ * in 0.1.4). Fill them from this machine's current Claude login, but only for batches that belong to that
+ * same Claude account (matched by the salted account hash).
+ */
+export function currentEmailProofs(salt: string, config: Config = loadConfig()): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const root of config.configDirs) {
+    const a = readAccount(root);
+    if (a.accountUuid && a.emailProof) m.set(hashAccount(salt, a.accountUuid), a.emailProof);
+  }
+  return m;
+}
+
+export function upgradeQueuedBatch(batch: IngestBatch, proofs: Map<string, string>): IngestBatch {
+  if (batch.accountEmailProof) return batch;
+  const proof = proofs.get(batch.accountHash);
+  return proof ? { ...batch, accountEmailProof: proof } : batch;
+}
+
 export async function flushOutbox(creds: Credentials, log: Logger): Promise<FlushResult> {
   const out: FlushResult = { uploaded: 0, batches: 0, deduplicated: 0, pending: 0, fatal: null, retryAfterSec: null, lastError: null };
+  let proofs: Map<string, string> | null = null;
   for (const file of outboxFiles()) {
-    const batch = readJson<IngestBatch>(file);
-    if (!batch) {
+    const stored = readJson<IngestBatch>(file);
+    if (!stored) {
       fs.rmSync(file, { force: true });
       continue;
     }
+    if (!stored.accountEmailProof) proofs ??= currentEmailProofs(creds.hashSalt);
+    const batch = proofs ? upgradeQueuedBatch(stored, proofs) : stored;
     const r = await uploadBatch(creds.server, creds.token, batch);
     if (r.ok) {
       out.batches++;

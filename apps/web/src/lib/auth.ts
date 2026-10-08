@@ -26,7 +26,7 @@ export const auth = betterAuth({
   // Local development only, so the app can be tried before a Google OAuth client exists.
   emailAndPassword: { enabled: devPasswordLogin },
   session: { expiresIn: 60 * 60 * 24 * 30, updateAge: 60 * 60 * 24 },
-  // Access control: only allowlisted leads and people they invited can sign in.
+  // Access control: only allowlisted leads (ALLOWED_EMAILS) can sign in.
   // Checked when the account is first created and on every new sign-in session.
   databaseHooks: {
     user: {

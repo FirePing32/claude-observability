@@ -1,27 +1,18 @@
-import { and, eq, isNull } from "drizzle-orm";
 import { Badge, Card, Code, PageHeader, Table, Td } from "@/components/ui";
 import { WorkspaceForm } from "@/components/forms/workspace-form";
-import { removeMember, resetAccountPin, revokeEnrollmentCode, revokeInvite, revokeShareLink, updateWorkspace } from "@/app/actions";
-import { db, schema } from "@/lib/db";
+import { resetAccountPin, updateWorkspace } from "@/app/actions";
 import { dateTime, int, relTime, usd } from "@/lib/format";
 import { pageContext, type PageProps } from "@/lib/page";
 import { dataQuality, devicesWithStats } from "@/lib/queries";
 import { allowedClaudeEmails } from "@/lib/email-check";
-import { ClaudeEmailPolicyForm, DeleteWorkspaceForm, DeviceActions, InviteForm, ShareLinkButton, SmallAction } from "./forms";
+import { EnrollmentCodes } from "./codes";
+import { ClaudeEmailPolicyForm, DeleteWorkspaceForm, DeviceActions, SmallAction } from "./forms";
 
 export default async function Settings(props: PageProps) {
-  const { id, workspace: ws, role, user, tz } = await pageContext(props);
+  const { id, workspace: ws, role, tz } = await pageContext(props);
   const owner = role === "owner";
-  const [members, invites, devices, codes, links, dq, approvedEmails] = await Promise.all([
-    db
-      .select({ userId: schema.user.id, name: schema.user.name, email: schema.user.email, role: schema.memberships.role })
-      .from(schema.memberships)
-      .innerJoin(schema.user, eq(schema.user.id, schema.memberships.userId))
-      .where(eq(schema.memberships.workspaceId, id)),
-    db.select().from(schema.invites).where(and(eq(schema.invites.workspaceId, id), isNull(schema.invites.acceptedAt))),
+  const [devices, dq, approvedEmails] = await Promise.all([
     devicesWithStats(id),
-    db.select().from(schema.enrollmentCodes).where(and(eq(schema.enrollmentCodes.workspaceId, id), isNull(schema.enrollmentCodes.revokedAt))),
-    db.select().from(schema.shareLinks).where(and(eq(schema.shareLinks.workspaceId, id), isNull(schema.shareLinks.revokedAt))),
     dataQuality(id),
     allowedClaudeEmails(ws),
   ]);
@@ -98,55 +89,11 @@ export default async function Settings(props: PageProps) {
           })}
         </Table>
         {!devices.length && <p className="py-6 text-center text-sm text-muted">No machines yet. See Connect machines.</p>}
-        {owner && codes.length > 0 && (
-          <div className="mt-4">
-            <div className="mb-1 text-xs font-medium text-ink-2">Active enrollment codes</div>
-            <Table head={["Label", "Used", "Expires", ""]}>
-              {codes.map((c) => (
-                <tr key={c.id}>
-                  <Td right={false}>{c.label ?? "-"}</Td>
-                  <Td>
-                    {c.uses}/{c.maxUses}
-                  </Td>
-                  <Td>{c.expiresAt.getTime() < now ? "expired" : dateTime(c.expiresAt, tz)}</Td>
-                  <Td>
-                    <SmallAction label="Revoke" run={revokeEnrollmentCode.bind(null, id, c.id)} />
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          </div>
-        )}
       </Card>
 
+      <EnrollmentCodes workspaceId={id} tz={tz} owner={owner} />
+
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card title="People with access" sub="Dashboard access only; everyone sees account-level numbers.">
-          <Table head={["Person", "Role", ""]}>
-            {members.map((m) => (
-              <tr key={m.userId}>
-                <Td right={false}>
-                  {m.name} <span className="text-muted">{m.email}</span>
-                </Td>
-                <Td>{m.role}</Td>
-                <Td>{owner && m.userId !== user.id && m.userId !== ws.ownerId && <SmallAction label="Remove" run={removeMember.bind(null, id, m.userId)} confirmText={`Remove ${m.email}?`} />}</Td>
-              </tr>
-            ))}
-            {invites.map((i) => (
-              <tr key={i.id}>
-                <Td right={false}>
-                  <span className="text-muted">{i.email}</span> <Badge>invited</Badge>
-                </Td>
-                <Td>{i.role}</Td>
-                <Td>{owner && <SmallAction label="Cancel" run={revokeInvite.bind(null, id, i.id)} />}</Td>
-              </tr>
-            ))}
-          </Table>
-          {owner && (
-            <div className="mt-4">
-              <InviteForm workspaceId={id} />
-            </div>
-          )}
-        </Card>
         <Card title="Data quality" sub="Last 30 days">
           <dl className="grid grid-cols-[1fr_auto] gap-y-2 text-sm">
             <dt className="text-ink-2">Requests seen by transcripts and telemetry</dt>
@@ -169,23 +116,7 @@ export default async function Settings(props: PageProps) {
       </div>
 
       {owner && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <Card title="Share a read-only overview" sub="Anyone with the link sees the overview numbers (no session titles).">
-            <ShareLinkButton workspaceId={id} />
-            {links.length > 0 && (
-              <Table className="mt-3" head={["Created", "Expires", ""]}>
-                {links.map((l) => (
-                  <tr key={l.id}>
-                    <Td right={false}>{dateTime(l.createdAt, tz)}</Td>
-                    <Td>{l.expiresAt ? dateTime(l.expiresAt, tz) : "never"}</Td>
-                    <Td>
-                      <SmallAction label="Revoke" run={revokeShareLink.bind(null, id, l.id)} />
-                    </Td>
-                  </tr>
-                ))}
-              </Table>
-            )}
-          </Card>
+        <div className="mt-4">
           <Card title="Danger zone">
             <DeleteWorkspaceForm workspaceId={id} name={ws.name} />
           </Card>

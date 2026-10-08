@@ -15,7 +15,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       {error && (
         <p className="mt-4 rounded-lg border border-line bg-surface p-3 text-sm text-bad">
           {/not_allowed|forbidden|unable_to_create/i.test(error)
-            ? "This Google account doesn't have access. Ask an approved lead to invite your e-mail, or use an allowed account."
+            ? "This Google account doesn't have access. Ask the administrator to approve your e-mail."
             : "Sign-in didn't complete. Please try again."}
         </p>
       )}

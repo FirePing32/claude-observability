@@ -3,9 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import {
   createEnrollmentCode,
-  createShareLink,
   deleteWorkspace,
-  inviteMember,
   updateClaudeEmailPolicy,
   renameDevice,
   revokeDevice,
@@ -49,24 +47,6 @@ export function EnrollCodeForm({ workspaceId, serverFlag }: { workspaceId: strin
       )}
       {state?.error && <p className="mt-2 text-sm text-bad">{state.error}</p>}
     </div>
-  );
-}
-
-export function InviteForm({ workspaceId }: { workspaceId: string }) {
-  const [state, run, pending] = useActionState(inviteMember.bind(null, workspaceId), null);
-  return (
-    <form action={run} className="flex flex-wrap items-end gap-2">
-      <label className="flex-1">
-        <span className="text-xs text-ink-2">Google e-mail</span>
-        <input name="email" type="email" required className={inputCls} placeholder="name@gmail.com" />
-      </label>
-      <select name="role" className={`${inputCls} w-auto`}>
-        <option value="viewer">Viewer</option>
-        <option value="owner">Owner</option>
-      </select>
-      <Button disabled={pending}>Invite</Button>
-      {(state?.error || state?.message) && <p className={`w-full text-sm ${state.error ? "text-bad" : "text-good"}`}>{state.error ?? state.message}</p>}
-    </form>
   );
 }
 
@@ -116,33 +96,6 @@ export function SmallAction({ label, run, confirmText, tone = "bad" }: { label: 
     >
       {label}
     </button>
-  );
-}
-
-export function ShareLinkButton({ workspaceId }: { workspaceId: string }) {
-  const [pending, start] = useTransition();
-  const [link, setLink] = useState<string | null>(null);
-  return (
-    <div>
-      <Button
-        variant="ghost"
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            const r = await createShareLink(workspaceId);
-            if (r?.secret) setLink(`${window.location.origin}${r.secret}`);
-          })
-        }
-      >
-        Create read-only link
-      </Button>
-      {link && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-line bg-surface-2 p-3">
-          <code className="flex-1 truncate font-mono text-xs">{link}</code>
-          <CopyButton text={link} />
-        </div>
-      )}
-    </div>
   );
 }
 

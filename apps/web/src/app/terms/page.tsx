@@ -16,7 +16,7 @@ export default function Terms() {
 
       <h2>Your responsibilities</h2>
       <ul>
-        <li>Only upload data from Claude accounts and computers you are allowed to use, and only invite people who should see that data.</li>
+        <li>Only upload data from Claude accounts and computers you are allowed to use, and share read-only links only with people who should see that data.</li>
         <li>Keep machine tokens and enrollment codes private, and revoke them if they are exposed.</li>
         <li>Use Claude itself in line with Anthropic&apos;s terms; this service does not change those terms.</li>
         <li>Don&apos;t misuse the service: no attempts to access other workspaces, overload the API, or upload content that isn&apos;t usage data.</li>

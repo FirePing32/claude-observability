@@ -14,7 +14,7 @@ export default function Privacy() {
       <h2>Information from Google sign-in</h2>
       <p>
         When you sign in with Google we receive your name, e-mail address and profile picture (the <code>openid</code>, <code>email</code> and{" "}
-        <code>profile</code> scopes). We use them only to identify you, show who has access to a workspace, and let workspace owners invite you by e-mail.
+        <code>profile</code> scopes). We use them only to identify you and check that your e-mail is approved to use the service.
         We do not request access to Gmail, Drive, Calendar or any other Google data.
       </p>
 
@@ -50,8 +50,7 @@ export default function Privacy() {
       <p>
         Data belongs to a workspace. Workspace members see account-level totals and also usage per enrolled machine (each machine&apos;s name, its
         requests and API-equivalent value), which can indicate how much a particular computer, and so possibly a particular person, used. The service does
-        not label usage by person. Only people the workspace owner invites can see it, plus anyone holding a read-only share link the owner creates (which
-        shows aggregate numbers only). Service providers that process data on our behalf: Vercel (hosting), Neon (database), Google (sign-in), and, only if
+        not label usage by person. Only the workspace's owners, signed in with an approved account, can see it. There are no public or shared links. Service providers that process data on our behalf: Vercel (hosting), Neon (database), Google (sign-in), and, only if
         configured, Resend (alert e-mails) and Anthropic (AI digest).
       </p>
 

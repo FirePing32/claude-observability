@@ -47,7 +47,7 @@ numbers only**, never prompts, code or responses. A Next.js dashboard turns them
 | **Plan value** | Cumulative API-equivalent value against your plan price, value by billing cycle, projection, and a right-sizing note |
 | **Insights** | Rule-based findings (limit pressure, cache-hit drops, runaway sessions, Opus-heavy weeks, silent machines, unseen usage, plan fit) and an optional weekly AI digest built from aggregates only |
 | **Alerts** | Slack, webhook or e-mail when a block nears the learned limit, a limit is hit, daily or weekly value crosses a threshold, or a machine goes silent |
-| **Settings** | Plan and price, timezone and renewal day, people with access (owner or viewer), machines (rename or revoke), enrollment codes, the Claude-account pin, data quality, read-only share links, delete |
+| **Settings** | Plan and price, timezone and renewal day, machines (rename or revoke), enrollment codes, the Claude-account check and pin, data quality, delete |
 
 All dollar figures are **API-equivalent value**: what the same tokens would cost on Anthropic's pay-as-you-go
 API. On a subscription, that's the value you get, not money you spend.
@@ -276,7 +276,7 @@ All variables live in `apps/web` (`.env.local` locally, Vercel project settings 
 | `CRON_SECRET` | yes | Protects `/api/cron/*`; Vercel Cron sends it automatically |
 | `RESEND_API_KEY`, `ALERT_FROM_EMAIL` | no | E-mail alerts through Resend |
 | `ANTHROPIC_API_KEY` | no | Weekly AI digest (Claude Opus 5.5, aggregates only) |
-| `ALLOWED_EMAILS` | recommended | Comma-separated e-mails and/or `@domain.com` entries for **leads** who may sign in and create workspaces. People a lead invites can sign in to view only those workspaces; everyone else is refused at sign-in. Empty = any Google account. |
+| `ALLOWED_EMAILS` | recommended | Comma-separated e-mails and/or `@domain.com` entries for **leads**, the only people who may sign in. Each lead creates and owns the workspace for their Claude account; everyone else is refused at sign-in. There are no in-app invites. Empty = any Google account. |
 | `DEV_PASSWORD_LOGIN` | dev only | `1` enables e-mail/password sign-in; ignored when `NODE_ENV=production` |
 
 ---
@@ -335,7 +335,7 @@ Defined in [`apps/web/src/lib/db/schema.ts`](apps/web/src/lib/db/schema.ts).
 | Tenancy | `workspaces` (one Claude account; pinned account hash, per-workspace hash salt, plan, timezone, renewal day), `memberships`, `invites`, `plan_periods` |
 | Machines | `devices`, `enrollment_codes`, `device_auth_requests` |
 | Facts | `api_requests` (primary key: workspace + request id), `session_meta`, `session_snapshots`, `session_events`, `error_events`, `limit_events`, `otel_metrics`, `ingest_log` |
-| Product | `alert_rules`, `alert_events` (unique per rule + block or period), `digests`, `share_links` |
+| Product | `alert_rules`, `alert_events` (unique per rule + block or period), `digests` |
 
 Retention: raw facts 13 months, ingest log 90 days.
 
@@ -366,7 +366,7 @@ fixture case in `packages/cli/test/collect.test.ts`, and keep the privacy test p
 - Device tokens are random 256-bit values, stored only as SHA-256 hashes, and revocable per machine.
 - Enrollment codes are hashed, expiring and use-limited.
 - The browser-approval flow shows the requesting machine, OS and IP, and hands the token over exactly once.
-- Sign-in can be restricted to an allowlist (`ALLOWED_EMAILS`) of leads plus the people they invite. The check runs when
+- Sign-in can be restricted to an allowlist (`ALLOWED_EMAILS`) of leads; there are no in-app invites. The check runs when
   an account is created and on every sign-in, so removing someone takes effect at their next sign-in.
 - Every page, query and server action checks workspace membership, and owner-only actions check the role.
 - Uploads from a different Claude account than the one the workspace is pinned to are rejected.
