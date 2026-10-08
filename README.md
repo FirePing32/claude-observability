@@ -270,6 +270,7 @@ All variables live in `apps/web` (`.env.local` locally, Vercel project settings 
 | `CRON_SECRET` | yes | Protects `/api/cron/*`; Vercel Cron sends it automatically |
 | `RESEND_API_KEY`, `ALERT_FROM_EMAIL` | no | E-mail alerts through Resend |
 | `ANTHROPIC_API_KEY` | no | Weekly AI digest (Claude Opus 5.5, aggregates only) |
+| `ALLOWED_EMAILS` | recommended | Comma-separated e-mails and/or `@domain.com` entries for **leads** who may sign in and create workspaces. People a lead invites can sign in to view only those workspaces; everyone else is refused at sign-in. Empty = any Google account. |
 | `DEV_PASSWORD_LOGIN` | dev only | `1` enables e-mail/password sign-in; ignored when `NODE_ENV=production` |
 
 ---
@@ -359,6 +360,8 @@ fixture case in `packages/cli/test/collect.test.ts`, and keep the privacy test p
 - Device tokens are random 256-bit values, stored only as SHA-256 hashes, and revocable per machine.
 - Enrollment codes are hashed, expiring and use-limited.
 - The browser-approval flow shows the requesting machine, OS and IP, and hands the token over exactly once.
+- Sign-in can be restricted to an allowlist (`ALLOWED_EMAILS`) of leads plus the people they invite. The check runs when
+  an account is created and on every sign-in, so removing someone takes effect at their next sign-in.
 - Every page, query and server action checks workspace membership, and owner-only actions check the role.
 - Uploads from a different Claude account than the one the workspace is pinned to are rejected.
 - Webhook alert targets must be public `https` URLs (no private or loopback hosts). Slack targets must be on

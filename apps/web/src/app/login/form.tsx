@@ -15,7 +15,7 @@ export function LoginForm({ google, devPassword, next }: { google: boolean; devP
           disabled={busy}
           onClick={async () => {
             setBusy(true);
-            const r = await authClient.signIn.social({ provider: "google", callbackURL: next });
+            const r = await authClient.signIn.social({ provider: "google", callbackURL: next, errorCallbackURL: "/login" });
             if (r.error) {
               setError(r.error.message ?? "Sign-in failed");
               setBusy(false);

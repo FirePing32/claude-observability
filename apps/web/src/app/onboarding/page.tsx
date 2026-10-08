@@ -1,9 +1,21 @@
 import { createWorkspace } from "@/app/actions";
 import { WorkspaceForm } from "@/components/forms/workspace-form";
+import { isAllowlisted } from "@/lib/access";
 import { requireUser } from "@/lib/session";
 
 export default async function Onboarding() {
   const user = await requireUser();
+  if (!isAllowlisted(user.email)) {
+    return (
+      <main className="mx-auto max-w-lg px-6 py-16">
+        <h1 className="text-2xl font-semibold tracking-tight">No workspace yet</h1>
+        <p className="mt-2 text-sm text-ink-2">
+          Signed in as {user.email}. Creating workspaces is limited to approved leads. Ask the owner of your Claude account to invite this e-mail
+          from Settings → People with access, then sign in again.
+        </p>
+      </main>
+    );
+  }
   return (
     <main className="mx-auto max-w-lg px-6 py-16">
       <div className="text-sm font-medium text-accent">Step 1 of 2</div>

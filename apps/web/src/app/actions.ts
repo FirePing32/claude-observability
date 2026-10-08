@@ -8,6 +8,7 @@ import { z } from "zod";
 import { ALERT_TYPES, sendTestAlert, validateTarget } from "@/lib/alerts";
 import { db, schema } from "@/lib/db";
 import { digestConfigured, generateDigest } from "@/lib/digest";
+import { isAllowlisted } from "@/lib/access";
 import { requireMember, requireUser } from "@/lib/session";
 import { newDeviceToken, newHumanCode, newId, newSalt, normalizeCode, sha256 } from "@/lib/tokens";
 
@@ -33,6 +34,7 @@ const workspaceForm = z.object({
 
 export async function createWorkspace(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
+  if (!isAllowlisted(user.email)) return { error: "Only approved leads can create workspaces. Ask an owner to invite you instead." };
   const p = workspaceForm.safeParse(Object.fromEntries(form));
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Check the form." };
   const id = newId("ws");
@@ -140,6 +142,9 @@ export async function removeMember(wsId: string, userId: string) {
   const { workspace, user } = await requireMember(wsId, "owner");
   if (userId === workspace.ownerId || userId === user.id) return;
   await db.delete(schema.memberships).where(and(eq(schema.memberships.workspaceId, wsId), eq(schema.memberships.userId, userId)));
+  // drop their invite too, so a removed viewer can't sign back in through it
+  const [removed] = await db.select({ email: schema.user.email }).from(schema.user).where(eq(schema.user.id, userId));
+  if (removed) await db.delete(schema.invites).where(and(eq(schema.invites.workspaceId, wsId), eq(schema.invites.email, removed.email.toLowerCase())));
   revalidatePath(`/w/${wsId}/settings`);
 }
 
