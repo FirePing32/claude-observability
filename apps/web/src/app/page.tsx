@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LegalFooter } from "@/components/legal";
 import { redirect } from "next/navigation";
 import { acceptInvites, getUser, listWorkspaces } from "@/lib/session";
 
@@ -32,6 +33,9 @@ export default async function Home() {
         <Link href="/login" className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90">
           Sign in with Google
         </Link>
+      </div>
+      <div className="mt-16">
+        <LegalFooter />
       </div>
     </main>
   );

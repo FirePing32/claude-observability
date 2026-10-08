@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { LegalFooter } from "@/components/legal";
 import { devPasswordLogin, googleConfigured } from "@/lib/auth";
 import { getUser } from "@/lib/session";
 import { LoginForm } from "./form";
@@ -12,6 +13,12 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
       <p className="mt-1 text-sm text-ink-2">Use the Google account you want to view the dashboard with.</p>
       <LoginForm google={googleConfigured} devPassword={devPasswordLogin} next={safeNext} />
+      <p className="mt-6 text-xs text-muted">
+        By signing in you agree to the <a href="/terms" className="underline">terms</a> and <a href="/privacy" className="underline">privacy policy</a>.
+      </p>
+      <div className="mt-8">
+        <LegalFooter />
+      </div>
     </main>
   );
 }
