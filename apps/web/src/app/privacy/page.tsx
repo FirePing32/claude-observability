@@ -50,7 +50,7 @@ export default function Privacy() {
       <p>
         Data belongs to a workspace. Workspace members see account-level totals and also usage per enrolled machine (each machine&apos;s name, its
         requests and API-equivalent value), which can indicate how much a particular computer, and so possibly a particular person, used. The service does
-        not label usage by person. Only the workspace's owners, signed in with an approved account, can see it. There are no public or shared links. Service providers that process data on our behalf: Vercel (hosting), Neon (database), Google (sign-in), and, only if
+        not label usage by person. Only the workspace's owners, signed in with an approved account, can see it. There are no public or shared links. The service administrator can see, per workspace, the e-mails of the people with access, the names and status of its machines, and aggregate usage (totals and daily usage by model) to operate the service, but not sessions, titles, projects or per-machine usage. Service providers that process data on our behalf: Vercel (hosting), Neon (database), Google (sign-in), and, only if
         configured, Resend (alert e-mails) and Anthropic (AI digest).
       </p>
 

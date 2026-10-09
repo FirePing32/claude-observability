@@ -277,6 +277,7 @@ All variables live in `apps/web` (`.env.local` locally, Vercel project settings 
 | `RESEND_API_KEY`, `ALERT_FROM_EMAIL` | no | E-mail alerts through Resend |
 | `ANTHROPIC_API_KEY` | no | Weekly AI digest (Claude Opus 5.5, aggregates only) |
 | `ALLOWED_EMAILS` | recommended | Comma-separated e-mails and/or `@domain.com` entries for **leads**, the only people who may sign in. Each lead creates and owns the workspace for their Claude account; everyone else is refused at sign-in. There are no in-app invites. Empty = any Google account. |
+| `ADMIN_PASSWORD` | no | Enables the super-admin page at `/admin`: all workspaces (owner, plan, people, machines, totals and model-family mix), with a per-workspace page showing daily usage by model, people's e-mails and machine names. No sessions, titles or projects. At least 12 characters; empty means the page doesn't exist. Changing it signs out existing admin sessions. |
 | `DEV_PASSWORD_LOGIN` | dev only | `1` enables e-mail/password sign-in; ignored when `NODE_ENV=production` |
 
 ---
@@ -369,6 +370,8 @@ fixture case in `packages/cli/test/collect.test.ts`, and keep the privacy test p
 - Sign-in can be restricted to an allowlist (`ALLOWED_EMAILS`) of leads; there are no in-app invites. The check runs when
   an account is created and on every sign-in, so removing someone takes effect at their next sign-in.
 - Every page, query and server action checks workspace membership, and owner-only actions check the role.
+- The `/admin` page is protected by `ADMIN_PASSWORD`, with a signed HTTP-only cookie (12 h, path `/admin`), constant-time
+  comparison and 5 attempts per 15 minutes per IP. It shows aggregates only.
 - Uploads from a different Claude account than the one the workspace is pinned to are rejected.
 - **Claude account e-mail check** (on by default, Settings → Claude account): machines must be logged into Claude
   with a workspace owner's e-mail or one on the workspace's extra list. The collector sends only a one-way hash of
