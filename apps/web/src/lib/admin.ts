@@ -11,7 +11,18 @@ import { cookies } from "next/headers";
 export const ADMIN_COOKIE = "co_admin";
 const TTL_MS = 12 * 60 * 60 * 1000;
 
-export const adminEnabled = () => Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.length >= 12);
+let warned = false;
+export const adminEnabled = () => {
+  const ok = Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.length >= 12);
+  if (!ok && !warned) {
+    warned = true;
+    // Server log only (Vercel → Logs); never the value or its length.
+    console.warn(
+      `[admin] /admin is disabled: ADMIN_PASSWORD is ${process.env.ADMIN_PASSWORD === undefined ? "not set for this deployment's environment" : "shorter than 12 characters"}.`,
+    );
+  }
+  return ok;
+};
 
 const key = () => createHash("sha256").update(`admin:${process.env.ADMIN_PASSWORD}:${process.env.BETTER_AUTH_SECRET ?? ""}`).digest();
 const sign = (exp: number) => createHmac("sha256", key()).update(`admin-session:${exp}`).digest("hex");

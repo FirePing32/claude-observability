@@ -42,7 +42,8 @@ export async function POST(req: Request) {
     return apiError(409, "account_mismatch", "This machine is logged into a different Claude account than this workspace tracks.");
 
   const res = await ingestTranscriptBatch(ctx, batch);
-  after(() => evaluateAlerts(ctx.workspace.id, { reason: "ingest" }).catch(() => undefined));
+  const force = batch.records.some((r) => r.kind === "limit");
+  after(() => evaluateAlerts(ctx.workspace.id, { reason: "ingest", force }).catch(() => undefined));
   return Response.json({
     accepted: res.accepted,
     deduplicated: res.deduplicated,

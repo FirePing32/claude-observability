@@ -322,19 +322,35 @@ export async function blockData(ws: string, from: Date, to: Date): Promise<Block
     reqs.map((r) => ({ ts: r.t, value: r.value, opus: modelFamily(r.model) === "opus" })),
     lims.map((l) => ({ ts: l.t, kind: l.kind, resetsAt: l.resets })),
   ).filter((b) => b.end > from.getTime());
-  // ceilings are learned from all history, not just the visible range
+  return { blocks, ceiling: await learnedCeiling(ws) };
+}
+
+const CEILING_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * The ceiling is learned from 120 days of requests, which is megabytes per read. It only changes
+ * when a limit hit arrives (or late uploads fill in an old block), so it's cached on the workspace
+ * and recomputed when the set of limit hits changes, or hourly.
+ */
+async function learnedCeiling(ws: string): Promise<Ceiling | null> {
+  const [s] = await rows<{ n: number; last: number | null; cache: { key: string; at: number; ceiling: Ceiling | null } | null }>(sql`
+    select (select count(*)::int from limit_events where workspace_id = ${ws} and ts >= now() - interval '120 days') n,
+           (select extract(epoch from max(ts))::float8 from limit_events where workspace_id = ${ws}) last,
+           (select ceiling_cache from workspaces where id = ${ws}) cache`);
+  if (!s || s.n === 0) return null;
+  const key = `${s.n}:${s.last}`;
+  if (s.cache && s.cache.key === key && Date.now() - s.cache.at < CEILING_TTL_MS) return s.cache.ceiling;
+
   const allReqs = await rows<{ t: number; value: number }>(sql`
     select extract(epoch from ts)::float8 * 1000 t, value_usd value from api_requests
-    where workspace_id = ${ws} and ts >= now() - interval '120 days'
-      and exists (select 1 from limit_events l where l.workspace_id = ${ws})
-    order by ts`);
+    where workspace_id = ${ws} and ts >= now() - interval '120 days' order by ts`);
   const allLims = await rows<{ t: number; kind: string }>(sql`
     select extract(epoch from ts)::float8 * 1000 t, limit_kind kind from limit_events
     where workspace_id = ${ws} and ts >= now() - interval '120 days' order by ts`);
-  const ceiling = allLims.length
-    ? learnCeiling(buildBlocks(allReqs.map((r) => ({ ts: r.t, value: r.value, opus: false })), allLims.map((l) => ({ ts: l.t, kind: l.kind, resetsAt: null }))))
-    : null;
-  return { blocks, ceiling };
+  const ceiling = learnCeiling(buildBlocks(allReqs.map((r) => ({ ts: r.t, value: r.value, opus: false })), allLims.map((l) => ({ ts: l.t, kind: l.kind, resetsAt: null }))));
+  const cache = { key, at: Date.now(), ceiling };
+  await db.execute(sql`update workspaces set ceiling_cache = ${JSON.stringify(cache)}::jsonb where id = ${ws}`);
+  return ceiling;
 }
 
 export async function weeklyValue(ws: string, now = new Date()) {

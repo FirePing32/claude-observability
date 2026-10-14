@@ -101,13 +101,19 @@ interface Live {
 
 const money = (n: number) => `$${n.toFixed(n >= 100 ? 0 : 2)}`;
 
-/** Current 5-hour block, refreshed every 30 s (no websockets needed on Vercel). */
+/**
+ * Current 5-hour block, refreshed every 60 s while the tab is visible (no websockets needed on Vercel).
+ * Hidden tabs don't poll, so a forgotten tab doesn't keep the database awake or use network transfer.
+ */
 export function LiveBlock({ workspaceId, tz, initial }: { workspaceId: string; tz: string; initial: Live }) {
   const [d, setD] = useState<Live>(initial);
   const [now, setNow] = useState(initial.serverTime);
   useEffect(() => {
     let stop = false;
+    let last = Date.now();
     const tick = async () => {
+      if (document.hidden) return;
+      last = Date.now();
       try {
         const r = await fetch(`/api/w/${workspaceId}/live`, { cache: "no-store" });
         if (r.ok && !stop) setD(await r.json());
@@ -115,12 +121,17 @@ export function LiveBlock({ workspaceId, tz, initial }: { workspaceId: string; t
         /* keep last frame */
       }
     };
-    const a = setInterval(tick, 30_000);
+    const onVisible = () => {
+      if (!document.hidden && Date.now() - last > 60_000) void tick();
+    };
+    const a = setInterval(tick, 60_000);
     const b = setInterval(() => setNow(Date.now()), 15_000);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stop = true;
       clearInterval(a);
       clearInterval(b);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [workspaceId]);
 

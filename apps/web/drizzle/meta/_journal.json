@@ -15,6 +15,13 @@
       "when": 1791482738107,
       "tag": "0001_claude_email_check",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791962534511,
+      "tag": "0002_egress_caches",
+      "breakpoints": true
     }
   ]
 }

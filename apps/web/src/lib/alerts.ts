@@ -68,12 +68,22 @@ async function deliver(rule: typeof schema.alertRules.$inferSelect, message: str
  * Evaluate a workspace's alert rules. Each firing is keyed (rule + period/block)
  * and recorded once, so repeated evaluations never re-send the same alert.
  */
-export async function evaluateAlerts(workspaceId: string, _opts: { reason: "ingest" | "cron" | "test" } = { reason: "cron" }) {
+export async function evaluateAlerts(workspaceId: string, opts: { reason: "ingest" | "cron" | "test"; force?: boolean } = { reason: "cron" }) {
   const rules = await db
     .select()
     .from(schema.alertRules)
     .where(and(eq(schema.alertRules.workspaceId, workspaceId), eq(schema.alertRules.enabled, true)));
   if (!rules.length) return [];
+  // Uploads arrive every few seconds while people work; checking once a minute is plenty.
+  // A batch carrying a limit hit is always checked, since usage (and uploads) usually stop right after.
+  if (opts.reason === "ingest" && !opts.force) {
+    const claimed = await db.execute(
+      sql`update workspaces set alerts_checked_at = now()
+          where id = ${workspaceId} and (alerts_checked_at is null or alerts_checked_at < now() - interval '1 minute')
+          returning id`,
+    );
+    if (!(claimed as unknown as unknown[]).length) return [];
+  }
   const [ws] = await db.select().from(schema.workspaces).where(eq(schema.workspaces.id, workspaceId));
   if (!ws) return [];
   const now = new Date();
