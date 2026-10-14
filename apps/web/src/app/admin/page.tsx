@@ -13,7 +13,7 @@ import { adminLogout } from "./actions";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Admin · Claude Observability", robots: { index: false, follow: false } };
 
-const RANGES = { "7": "7 days", "30": "30 days", "90": "90 days" } as const;
+const RANGES = { "7": "7 days", "30": "30 days", "60": "60 days" } as const;
 
 const FAMILY: Record<Family, { label: string; color: string }> = {
   opus: { label: "Opus", color: "var(--series-1)" },

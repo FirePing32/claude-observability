@@ -89,7 +89,7 @@ export const workspaces = pgTable("workspaces", {
   extraClaudeEmails: text("extra_claude_emails").array().notNull().default(sql`'{}'::text[]`),
   billingDay: integer("billing_day").notNull().default(1),
   timezone: text("timezone").notNull().default("UTC"),
-  /** Learned 5-hour ceiling, cached so pages don't re-read 120 days of requests (see queries.blockData). */
+  /** Learned 5-hour ceiling, cached so pages don't re-read every kept request (see queries.blockData). */
   ceilingCache: jsonb("ceiling_cache").$type<{ key: string; at: number; ceiling: { median: number; p10: number; samples: number } | null }>(),
   /** Throttles alert evaluation after uploads to once a minute per workspace. */
   alertsCheckedAt: ts("alerts_checked_at"),

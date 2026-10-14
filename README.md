@@ -338,7 +338,9 @@ Defined in [`apps/web/src/lib/db/schema.ts`](apps/web/src/lib/db/schema.ts).
 | Facts | `api_requests` (primary key: workspace + request id), `session_meta`, `session_snapshots`, `session_events`, `error_events`, `limit_events`, `otel_metrics`, `ingest_log` |
 | Product | `alert_rules`, `alert_events` (unique per rule + block or period), `digests` |
 
-Retention: raw facts 13 months, ingest log 90 days.
+Retention: raw facts (requests, sessions, events, limit hits) 60 days, ingest log 14 days, set in
+[`apps/web/src/lib/retention.ts`](apps/web/src/lib/retention.ts). Sized so three busy accounts stay well inside a 1 GB
+free Postgres tier; the "All" range covers the same 60 days.
 
 ---
 

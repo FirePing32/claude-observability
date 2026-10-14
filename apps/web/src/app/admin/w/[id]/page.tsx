@@ -15,7 +15,7 @@ import { byModel, dailyByModel, devicesWithStats, totals } from "@/lib/queries";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Admin · Workspace · Claude Observability", robots: { index: false, follow: false } };
 
-const RANGES = { "7": "7 days", "30": "30 days", "90": "90 days" } as const;
+const RANGES = { "7": "7 days", "30": "30 days", "60": "60 days" } as const;
 
 /** Admin view of one workspace: model usage over time, who has access, and its machines. No sessions, titles or projects. */
 export default async function AdminWorkspace({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ days?: string }> }) {

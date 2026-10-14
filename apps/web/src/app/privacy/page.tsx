@@ -56,7 +56,7 @@ export default function Privacy() {
 
       <h2>Retention and deletion</h2>
       <p>
-        Usage records are kept for 13 months, upload logs for 90 days. A workspace owner can delete the workspace at any time in Settings, which permanently
+        Usage records are kept for 60 days, upload logs for 14 days. A workspace owner can delete the workspace at any time in Settings, which permanently
         deletes all of its data. To delete your account, or for any privacy request, open an issue at <a href={`${REPO_URL}/issues`}>{REPO_URL}/issues</a>{" "}
         and we will follow up privately.
       </p>

@@ -439,7 +439,7 @@ Global UX:
 - **Device-code flow**: short-lived codes (10 min), one-time use, polling rate limited; the browser approval screen shows the device name, OS and IP.
 - **Authorization**: checks run in server actions *and* in the query layer, with RLS as a backstop, plus tests that try to read across workspaces.
 - **Web hardening**: CSP, HSTS, `frame-ancestors 'none'`. CSRF is handled by Better Auth and server actions.
-- **Retention**: raw facts kept 13 months by default and configurable; rollups kept indefinitely. Full export and hard delete (GDPR).
+- **Retention**: raw facts kept 60 days (`RETENTION_DAYS`), upload log 14 days, to fit a free Postgres tier. Full export and hard delete (GDPR).
 - **Google OAuth**: a published consent screen, privacy policy and terms URLs, and separate OAuth clients for preview and production.
 - **Vercel**: preview deploys use their own Neon branch. Production secrets live only in the Production environment.
 
