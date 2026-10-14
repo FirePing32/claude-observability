@@ -1,25 +1,47 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "./log";
+import { files, obsHome } from "./paths";
 import { loadConfig, loadCredentials } from "./store";
 import { syncOnce } from "./sync";
 
-const DEBOUNCE_MS = 1500;
-const POLL_MS = 5000;
+const TICK_MS = 60 * 1000;
 const RESCAN_MS = 15 * 60 * 1000;
 const MAX_BACKOFF_MS = 5 * 60 * 1000;
 
+/** True (and clears the request) when `claude-obs sync` asked the running agent to upload now. */
+function takeSyncNow(): boolean {
+  try {
+    fs.rmSync(files.syncNow());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Ask a running agent to upload on its next check (within a minute, or at once where file watching works). */
+export function requestSyncNow(): void {
+  fs.mkdirSync(obsHome(), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(files.syncNow(), new Date().toISOString());
+}
+
 /**
- * Long-running watcher: re-syncs shortly after any transcript changes, with a
- * polling fallback and a periodic full rescan as a safety net. Passes are
- * serialized; upload failures back off exponentially up to 5 minutes.
+ * Long-running uploader. File changes only mark the collector dirty; a pass (read new lines →
+ * outbox → upload) runs when it's dirty and the upload interval has elapsed since the last pass.
+ * Batching uploads every few minutes, instead of seconds after each change, lets the dashboard's
+ * database go idle between uploads. Nothing is lost by waiting: offsets only move forward once
+ * a batch is in the outbox. A periodic rescan covers missed watch events; upload failures back
+ * off exponentially up to 5 minutes.
  */
-export async function watch(log: Logger, opts: { onPass?: (summary: string) => void } = {}): Promise<never> {
-  let timer: NodeJS.Timeout | null = null;
+export async function watch(log: Logger, opts: { onPass?: (summary: string) => void; intervalMin?: number } = {}): Promise<never> {
   let running = false;
   let again = false;
+  let dirty = true;
+  let lastPassAt = 0;
+  let lastRescanAt = Date.now();
   let backoff = 0;
   let retryTimer: NodeJS.Timeout | null = null;
+  const intervalMs = () => (opts.intervalMin ?? loadConfig().uploadIntervalMin) * 60 * 1000;
 
   const pass = async () => {
     if (running) {
@@ -27,6 +49,8 @@ export async function watch(log: Logger, opts: { onPass?: (summary: string) => v
       return;
     }
     running = true;
+    dirty = false; // changes that land during this pass mark it dirty again
+    lastPassAt = Date.now();
     try {
       const creds = loadCredentials();
       if (!creds) {
@@ -63,33 +87,50 @@ export async function watch(log: Logger, opts: { onPass?: (summary: string) => v
       running = false;
       if (again) {
         again = false;
-        schedule();
+        void pass();
       }
     }
   };
 
-  const schedule = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void pass(), DEBOUNCE_MS);
+  let polling = false;
+  const tick = () => {
+    const now = Date.now();
+    if (takeSyncNow()) {
+      log.info("upload requested by `claude-obs sync`");
+      return void pass();
+    }
+    if (polling || now - lastRescanAt >= RESCAN_MS) {
+      dirty = true;
+      if (!polling) lastRescanAt = now;
+    }
+    if (dirty && now - lastPassAt >= intervalMs()) void pass();
   };
 
   const roots = loadConfig().configDirs;
-  let watching = 0;
   for (const root of roots) {
     const dir = path.join(root, "projects");
     try {
       fs.watch(dir, { recursive: true, persistent: true }, (_event, name) => {
-        if (!name || String(name).endsWith(".jsonl")) schedule();
+        if (!name || String(name).endsWith(".jsonl")) dirty = true;
       });
-      watching++;
       log.info(`watching ${dir}`);
     } catch (e) {
-      log.warn(`fs.watch unavailable for ${dir} (${(e as Error).message}); polling every ${POLL_MS / 1000}s`);
+      polling = true;
+      log.warn(`fs.watch unavailable for ${dir} (${(e as Error).message}); checking for new activity at each upload`);
     }
   }
-  if (watching < roots.length) setInterval(() => void pass(), POLL_MS);
-  setInterval(() => void pass(), RESCAN_MS);
+  // React to `claude-obs sync` at once where watching works; the minute tick covers the rest.
+  try {
+    fs.mkdirSync(obsHome(), { recursive: true, mode: 0o700 });
+    fs.watch(obsHome(), { persistent: true }, (_event, name) => {
+      if (name === path.basename(files.syncNow())) tick();
+    });
+  } catch {
+    /* tick polls for the request file */
+  }
+  setInterval(tick, TICK_MS);
 
+  log.info(`uploading new activity every ${Math.round(intervalMs() / 60000)} min (run \`claude-obs sync\` to upload now)`);
   await pass();
   return new Promise<never>(() => undefined);
 }

@@ -10,7 +10,7 @@
 
 **Goals**
 - **Correct account totals.** Every API request counted exactly once, across all machines and all of each machine's history.
-- **Zero configuration** once enrolled. The background agent keeps the dashboard within seconds of real time.
+- **Zero configuration** once enrolled. The background agent keeps the dashboard within about 10 minutes of real time (configurable), batching uploads so a serverless database can sleep between them.
 - **Provable privacy.** No prompt, response, thinking, tool I/O, file contents or full paths ever leave the machine.
 - **Robust to Claude Code updates.** The transcript format is internal and undocumented.
 - **Light.** Near-zero idle CPU, under 80 MB RSS, full-history import of 50 MB in under 10 s.
@@ -47,13 +47,13 @@ These shape the parser:
 | `claude-obs login --code XXXX-XXXX [--name "Studio Mac"]` | Enroll this machine with an owner-issued code |
 | `claude-obs login` | Enroll through the device-code flow: prints a URL and code; a workspace owner approves in the browser |
 | `claude-obs sync` | One-shot incremental upload of everything new since the last run. The first run imports the full history, with a progress bar. |
-| `claude-obs sync --watch` | Foreground watcher; uploads within about 2–5 s of new lines |
+| `claude-obs sync --watch [--interval MIN]` | Foreground watcher; uploads new lines every `upload-interval` minutes (default 10). `claude-obs sync` while it runs asks it to upload now. |
 | `claude-obs sync --dry-run [--json]` | Parses and prints exactly what *would* be uploaded. Sends nothing. |
 | `claude-obs install-agent` / `uninstall-agent` | Installs or removes the background service (launchd / systemd user unit / Windows Task Scheduler) running `sync --watch` |
 | `claude-obs status` | Workspace, device name, account match, config dirs, last upload, pending records, parser warnings, agent running? |
 | `claude-obs config-dirs add <path>` / `list` / `remove` | Register extra `CLAUDE_CONFIG_DIR` folders on this machine (they share the machine's single enrollment) |
 | `claude-obs otel --print` / `--install [--force]` / `--uninstall` | Show, or merge into `~/.claude/settings.json` (with a backup), the OpenTelemetry env block carrying this machine's token. Refuses to replace another collector without `--force`. |
-| `claude-obs config [titles on\|off] [hash-projects on\|off]` | Privacy switches |
+| `claude-obs config [titles on\|off] [hash-projects on\|off] [upload-interval MIN]` | Privacy switches and upload interval |
 | `claude-obs show-last-upload` | Prints the last uploaded batch, for an audit trail |
 | `claude-obs resync [--since 2026-09-01]` | Clears local offsets and re-uploads. Safe, because the server dedups. |
 | `claude-obs logout` | Revokes the device token server-side and deletes local credentials and state |
@@ -134,7 +134,7 @@ Each line goes through `JSON.parse` inside try/catch; malformed lines are counte
 
 ### 5.5 Outbox, upload, ack
 - Batches are written to `outbox/` **before** offsets are committed to `state.json`. A crash between the two only re-reads and re-queues lines, and the server deduplicates them, so a crash means a resend, never a loss. The outbox is flushed in order and survives being offline.
-- **Batching**: up to 500 records or 256 KB, gzip, flushed every 2 s in watch mode.
+- **Batching**: up to 500 records or 256 KB, gzip. In watch mode, file changes only mark the collector dirty; a pass runs when it is dirty and `upload-interval` minutes (default 10) have passed since the last one, or at once when `claude-obs sync` drops a `sync-now` file in the state folder. (0.1.5 and earlier uploaded about 2 s after every change, which kept the database awake all working day.)
 - **Retries**: exponential backoff with jitter (1 s → 5 min max) on network errors, 5xx and 429 (honoring `Retry-After`). While offline, the outbox simply grows.
 - **Non-retryable responses**:
   - `401` (token revoked): stop and tell the user to log in again.

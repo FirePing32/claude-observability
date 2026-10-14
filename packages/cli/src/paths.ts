@@ -27,6 +27,8 @@ export const files = {
   quarantine: () => path.join(obsHome(), "quarantine"),
   lastUpload: () => path.join(obsHome(), "last-upload.json"),
   lock: () => path.join(obsHome(), "agent.lock"),
+  /** Touched by `claude-obs sync` to ask a running agent to upload now. */
+  syncNow: () => path.join(obsHome(), "sync-now"),
   logDir: () => path.join(obsHome(), "logs"),
 };
 

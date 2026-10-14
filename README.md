@@ -187,13 +187,13 @@ npm install -g claude-obs
 |---|---|
 | `claude-obs login --code XXXX-XXXX [--name "Studio Mac"] [--server URL]` | Enroll with an owner-issued code. No dashboard login is needed on that machine. |
 | `claude-obs login [--server URL]` | Enroll by approving a code in the browser instead |
-| `claude-obs sync` | Upload everything new; the first run uploads all history |
-| `claude-obs sync --watch` | Keep running and upload within seconds of new activity |
+| `claude-obs sync` | Upload everything new; the first run uploads all history. If the background agent is running, asks it to upload now. |
+| `claude-obs sync --watch [--interval MIN]` | Keep running and upload new activity every 10 minutes (or `--interval`) |
 | `claude-obs sync --dry-run [--all] [--json]` | Print what would be uploaded; sends nothing |
 | `claude-obs install-agent [--print]` / `uninstall-agent` | Run `sync --watch` in the background (launchd on macOS, systemd user unit on Linux, Task Scheduler on Windows). Requires a global install. |
 | `claude-obs otel --print \| --install [--force] \| --uninstall` | Add or remove Claude Code's OpenTelemetry settings in `~/.claude/settings.json`, with a backup. Refuses to replace another collector unless you pass `--force`. |
 | `claude-obs status` | Workspace, server check, Claude login and plan, tracked files, pending batches, agent state |
-| `claude-obs config [titles on\|off] [hash-projects on\|off]` | Privacy switches |
+| `claude-obs config [titles on\|off] [hash-projects on\|off] [upload-interval MIN]` | Privacy switches, and how often the agent uploads (1–60 minutes, default 10) |
 | `claude-obs config-dirs [list \| add <path> \| remove <path>]` | Extra Claude Code config folders (`CLAUDE_CONFIG_DIR`) on this machine |
 | `claude-obs show-last-upload` | The last batch the server accepted |
 | `claude-obs resync` | Forget local progress and re-read all history (the server ignores duplicates) |

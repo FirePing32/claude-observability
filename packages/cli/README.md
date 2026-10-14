@@ -78,17 +78,21 @@ claude-obs sync --dry-run
 
 ```
 claude-obs login [--code XXXX-XXXX] [--name "Studio Mac"] [--server URL]
-claude-obs sync [--watch] [--dry-run [--all] [--json]] [--verbose]
+claude-obs sync [--watch [--interval MIN]] [--dry-run [--all] [--json]] [--verbose]
 claude-obs status
 claude-obs install-agent [--print] | uninstall-agent
 claude-obs otel --print | --install [--force] | --uninstall
-claude-obs config [titles on|off] [hash-projects on|off]
+claude-obs config [titles on|off] [hash-projects on|off] [upload-interval MIN]
 claude-obs config-dirs [list | add <path> | remove <path>]
 claude-obs show-last-upload
 claude-obs resync
 claude-obs doctor
 claude-obs logout
 ```
+
+The background agent uploads new activity every **10 minutes** by default, so the dashboard's database can sleep
+between uploads. Change it with `claude-obs config upload-interval <1–60>`. Run `claude-obs sync` at any time to
+upload immediately; if the agent is running, it asks the agent to do it.
 
 Local state lives in `~/.config/claude-obs` (override with `CLAUDE_OBS_HOME`).
 

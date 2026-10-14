@@ -51,7 +51,12 @@ export interface Config {
   configDirs: string[];
   titles: boolean;
   hashProjects: boolean;
+  /** Background agent: minutes between uploads. Longer gaps let a serverless database sleep. */
+  uploadIntervalMin: number;
 }
+
+export const DEFAULT_UPLOAD_INTERVAL_MIN = 10;
+export const clampInterval = (n: number) => Math.min(60, Math.max(1, Math.round(n)));
 
 export function loadConfig(): Config {
   const c = readJson<Partial<Config>>(files.config()) ?? {};
@@ -59,6 +64,7 @@ export function loadConfig(): Config {
     configDirs: c.configDirs?.length ? c.configDirs : [defaultClaudeRoot()],
     titles: c.titles ?? true,
     hashProjects: c.hashProjects ?? false,
+    uploadIntervalMin: typeof c.uploadIntervalMin === "number" ? clampInterval(c.uploadIntervalMin) : DEFAULT_UPLOAD_INTERVAL_MIN,
   };
 }
 export function saveConfig(c: Config): void {

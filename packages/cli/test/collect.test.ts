@@ -64,7 +64,7 @@ beforeEach(() => {
     path.join(root, ".claude.json"),
     JSON.stringify({ oauthAccount: { accountUuid: ACCOUNT, emailAddress: `${CANARY}@example.com`, organizationRateLimitTier: "default_claude_max_5x" } }),
   );
-  config = { configDirs: [root], titles: true, hashProjects: false };
+  config = { configDirs: [root], titles: true, hashProjects: false, uploadIntervalMin: 10 };
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 

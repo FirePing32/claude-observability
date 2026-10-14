@@ -20,20 +20,21 @@ import {
   saveConfig,
   saveCredentials,
   saveState,
+  clampInterval,
   type Credentials,
 } from "./store";
 import { collect, defaultDeviceName, flushOutbox, pendingCount, syncOnce, type CollectResult } from "./sync";
-import { watch } from "./watch";
+import { requestSyncNow, watch } from "./watch";
 
 const HELP = `claude-obs ${CLI_VERSION}: upload usage-only records from Claude Code to Claude Observability
 
 Usage:
   claude-obs login [--code XXXX-XXXX] [--name "Studio Mac"] [--server URL]
-  claude-obs sync [--watch] [--dry-run [--all] [--json]] [--verbose]
+  claude-obs sync [--watch [--interval MIN]] [--dry-run [--all] [--json]] [--verbose]
   claude-obs status
   claude-obs install-agent [--print] | uninstall-agent
   claude-obs config-dirs [list | add <path> | remove <path>]
-  claude-obs config [titles on|off] [hash-projects on|off]
+  claude-obs config [titles on|off] [hash-projects on|off] [upload-interval MIN]
   claude-obs otel --print | --install [--force] | --uninstall
   claude-obs show-last-upload
   claude-obs resync
@@ -52,6 +53,7 @@ const { values: flags, positionals } = parseArgs({
     name: { type: "string" },
     server: { type: "string" },
     watch: { type: "boolean" },
+    interval: { type: "string" },
     "dry-run": { type: "boolean" },
     all: { type: "boolean" },
     json: { type: "boolean" },
@@ -213,12 +215,19 @@ async function main(): Promise<void> {
       const creds = requireCreds();
       const lock = acquireLock();
       if (!lock.ok) {
-        console.log(`The background agent (pid ${lock.holder}) is already syncing; nothing to do.`);
+        if (flags.watch) return void console.log(`The background agent (pid ${lock.holder}) is already running.`);
+        requestSyncNow();
+        console.log(`The background agent (pid ${lock.holder}) is running; asked it to upload now. Check \`claude-obs status\` in a minute.`);
         return;
       }
       if (flags.watch) {
+        const intervalMin = flags.interval ? clampInterval(Number(flags.interval)) : undefined;
+        if (flags.interval && !Number.isFinite(Number(flags.interval))) {
+          console.error("--interval takes minutes, 1 to 60");
+          process.exit(1);
+        }
         log.info(`claude-obs ${CLI_VERSION} watching for new Claude Code activity…`);
-        await watch(log);
+        await watch(log, { intervalMin });
         return;
       }
       const { collected, flush } = await syncOnce(config, creds, log, { all: flags.all });
@@ -259,7 +268,9 @@ async function main(): Promise<void> {
       console.log(`Last sync: ${state.lastSyncAt ?? "never"}  ·  last upload: ${state.lastUploadAt ?? "never"}`);
       if (state.lastError) console.log(`Last error: ${state.lastError}`);
       const holder = lockHolder();
-      console.log(`Background agent: ${agentInstalled() ? "installed" : "not installed"}${holder ? `, running (pid ${holder})` : ""}`);
+      console.log(
+        `Background agent: ${agentInstalled() ? "installed" : "not installed"}${holder ? `, running (pid ${holder}), uploads every ${config.uploadIntervalMin} min` : ""}`,
+      );
       const unk = Object.entries(state.unknownTypes);
       if (unk.length) console.log(`Unrecognized record types seen: ${unk.map(([k, v]) => `${k}×${v}`).join(", ")}`);
       return;
@@ -315,14 +326,24 @@ async function main(): Promise<void> {
         const on = val === "on" || val === "true";
         if (key === "titles") config.titles = on;
         else if (key === "hash-projects") config.hashProjects = on;
-        else {
-          console.error("keys: titles, hash-projects");
+        else if (key === "upload-interval") {
+          const n = Number(val);
+          if (!val || !Number.isFinite(n) || n < 1 || n > 60) {
+            console.error("upload-interval takes minutes, 1 to 60 (default 10)");
+            process.exit(1);
+          }
+          config.uploadIntervalMin = clampInterval(n);
+        } else {
+          console.error("keys: titles, hash-projects, upload-interval");
           process.exit(1);
         }
         saveConfig(config);
       }
       const c = loadConfig();
-      console.log(`titles: ${c.titles ? "on" : "off"}\nhash-projects: ${c.hashProjects ? "on" : "off"}\nconfig-dirs: ${c.configDirs.join(", ")}`);
+      console.log(
+        `titles: ${c.titles ? "on" : "off"}\nhash-projects: ${c.hashProjects ? "on" : "off"}\nupload-interval: ${c.uploadIntervalMin} min\nconfig-dirs: ${c.configDirs.join(", ")}`,
+      );
+      if (key === "upload-interval" && lockHolder()) console.log("The running agent picks this up at its next check.");
       return;
     }
 
