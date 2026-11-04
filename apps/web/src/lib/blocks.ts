@@ -13,6 +13,8 @@ export interface ReqPoint {
   ts: number;
   value: number;
   opus: boolean;
+  /** Requests this point stands for (an hourly total from the database); default 1. */
+  n?: number;
 }
 export interface LimitPoint {
   ts: number;
@@ -50,7 +52,7 @@ export function buildBlocks(requests: ReqPoint[], limits: LimitPoint[] = [], rou
     }
     cur.lastTs = e.ts;
     if (e.req) {
-      cur.requests++;
+      cur.requests += e.req.n ?? 1;
       cur.value += e.req.value;
       if (e.req.opus) cur.opusValue += e.req.value;
     } else if (e.limit) {

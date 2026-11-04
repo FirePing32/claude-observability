@@ -1,7 +1,7 @@
 import "server-only";
 import { cacheSavingsUsd, modelFamily } from "@claude-obs/shared";
 import { sql, type SQL } from "drizzle-orm";
-import { buildBlocks, learnCeiling, type Block, type Ceiling } from "./blocks";
+import { buildBlocks, learnCeiling, type Block, type Ceiling, type ReqPoint } from "./blocks";
 import { db } from "./db";
 import { RETENTION_DAYS } from "./retention";
 
@@ -310,28 +310,57 @@ export interface BlockData {
   ceiling: Ceiling | null;
 }
 
+const HOUR_MS = 3600_000;
+
+/**
+ * Request points for rebuilding 5-hour blocks. Sending one row per request made each Overview, Limits or
+ * Plan value view read megabytes, so hours older than 12 h are summed in the database (one row per UTC hour
+ * and model). Blocks start and end on the hour, so membership and totals are unchanged. Recent hours stay
+ * per request (the live block's burn rate needs the first request's time), and so do hours holding a limit
+ * hit (value-at-limit needs the exact order of requests and the hit).
+ */
+async function requestPoints(ws: string, start: Date, to: Date): Promise<ReqPoint[]> {
+  const cut = new Date(Math.min(to.getTime(), Math.floor((Date.now() - 12 * HOUR_MS) / HOUR_MS) * HOUR_MS));
+  const r = await rows<{ t: number; value: number; model: string; n: number }>(sql`
+    with lim as (
+      select distinct date_trunc('hour', ts at time zone 'UTC') h from limit_events
+      where workspace_id = ${ws} and ts >= ${ts(start)} and ts < ${ts(to)}
+    )
+    select extract(epoch from date_trunc('hour', ts at time zone 'UTC'))::float8 * 1000 t, sum(value_usd)::float8 value, model, count(*)::int n
+    from api_requests
+    where workspace_id = ${ws} and ts >= ${ts(start)} and ts < ${ts(cut)}
+      and date_trunc('hour', ts at time zone 'UTC') not in (select h from lim)
+    group by 1, 3
+    union all
+    select extract(epoch from ts)::float8 * 1000 t, value_usd value, model, 1 n
+    from api_requests
+    where workspace_id = ${ws} and ts >= ${ts(start)} and ts < ${ts(to)}
+      and (ts >= ${ts(cut)} or date_trunc('hour', ts at time zone 'UTC') in (select h from lim))
+    order by 1`);
+  return r.map((x) => ({ ts: x.t, value: x.value, opus: modelFamily(x.model) === "opus", n: x.n }));
+}
+
 /** Blocks over [from, to); reads 5 h before `from` so a block straddling the edge is whole. */
 export async function blockData(ws: string, from: Date, to: Date): Promise<BlockData> {
   const start = new Date(from.getTime() - 5 * 3600_000);
-  const reqs = await rows<{ t: number; value: number; model: string }>(sql`
-    select extract(epoch from ts)::float8 * 1000 t, value_usd value, model
-    from api_requests where workspace_id = ${ws} and ts >= ${ts(start)} and ts < ${ts(to)} order by ts`);
+  const reqs = await requestPoints(ws, start, to);
   const lims = await rows<{ t: number; kind: string; resets: number | null }>(sql`
     select extract(epoch from ts)::float8 * 1000 t, limit_kind kind, extract(epoch from resets_at)::float8 * 1000 resets
     from limit_events where workspace_id = ${ws} and ts >= ${ts(start)} and ts < ${ts(to)} order by ts`);
   const blocks = buildBlocks(
-    reqs.map((r) => ({ ts: r.t, value: r.value, opus: modelFamily(r.model) === "opus" })),
+    reqs,
     lims.map((l) => ({ ts: l.t, kind: l.kind, resetsAt: l.resets })),
   ).filter((b) => b.end > from.getTime());
   return { blocks, ceiling: await learnedCeiling(ws) };
 }
 
-const CEILING_TTL_MS = 60 * 60 * 1000;
+/** A new limit hit invalidates the cache at once; the TTL only picks up late uploads into old blocks. */
+const CEILING_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The ceiling is learned from every kept request (RETENTION_DAYS), which is megabytes per read. It only changes
  * when a limit hit arrives (or late uploads fill in an old block), so it's cached on the workspace
- * and recomputed when the set of limit hits changes, or hourly.
+ * and recomputed when the set of limit hits changes, or daily.
  */
 async function learnedCeiling(ws: string): Promise<Ceiling | null> {
   const [s] = await rows<{ n: number; last: number | null; cache: { key: string; at: number; ceiling: Ceiling | null } | null }>(sql`
@@ -342,13 +371,11 @@ async function learnedCeiling(ws: string): Promise<Ceiling | null> {
   const key = `${s.n}:${s.last}`;
   if (s.cache && s.cache.key === key && Date.now() - s.cache.at < CEILING_TTL_MS) return s.cache.ceiling;
 
-  const allReqs = await rows<{ t: number; value: number }>(sql`
-    select extract(epoch from ts)::float8 * 1000 t, value_usd value from api_requests
-    where workspace_id = ${ws} and ts >= now() - make_interval(days => ${RETENTION_DAYS}) order by ts`);
+  const allReqs = await requestPoints(ws, new Date(Date.now() - RETENTION_DAYS * 86_400_000), new Date());
   const allLims = await rows<{ t: number; kind: string }>(sql`
     select extract(epoch from ts)::float8 * 1000 t, limit_kind kind from limit_events
     where workspace_id = ${ws} and ts >= now() - make_interval(days => ${RETENTION_DAYS}) order by ts`);
-  const ceiling = learnCeiling(buildBlocks(allReqs.map((r) => ({ ts: r.t, value: r.value, opus: false })), allLims.map((l) => ({ ts: l.t, kind: l.kind, resetsAt: null }))));
+  const ceiling = learnCeiling(buildBlocks(allReqs, allLims.map((l) => ({ ts: l.t, kind: l.kind, resetsAt: null }))));
   const cache = { key, at: Date.now(), ceiling };
   await db.execute(sql`update workspaces set ceiling_cache = ${JSON.stringify(cache)}::jsonb where id = ${ws}`);
   return ceiling;
