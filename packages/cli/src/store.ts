@@ -89,6 +89,21 @@ export interface State {
   lastSyncAt: string | null;
   lastUploadAt: string | null;
   lastError: string | null;
+  /**
+   * Per Claude folder: the account that was logged in at the last pass (salted hash and e-mail proof only).
+   * Session files don't say which account wrote them, so this is what tells an account switch apart.
+   */
+  accounts: Record<string, SavedAccount>;
+  /** The last time lines were skipped because the Claude login changed while the agent wasn't watching. */
+  lastSwitchSkip: { at: string; root: string; records: number } | null;
+}
+
+export interface SavedAccount {
+  hash: string;
+  emailProof: string | null;
+  rateLimitTier: string | null;
+  seatTier: string | null;
+  billingType: string | null;
 }
 
 const SENT_RETENTION_SEC = 3 * 24 * 3600;
@@ -103,6 +118,8 @@ export function emptyState(): State {
     lastSyncAt: null,
     lastUploadAt: null,
     lastError: null,
+    accounts: {},
+    lastSwitchSkip: null,
   };
 }
 

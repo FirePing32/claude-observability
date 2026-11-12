@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { evaluateAlerts } from "@/lib/alerts";
 import { authenticateDevice } from "@/lib/device-auth";
 import { apiError, MIN_CLI_VERSION, rateLimited, versionAtLeast } from "@/lib/http";
-import { checkAccount, ingestTranscriptBatch } from "@/lib/ingest";
+import { checkAccount, ingestTranscriptBatch, recordRefusal } from "@/lib/ingest";
 import { checkClaudeEmail, EMAIL_MISMATCH_MESSAGE, EMAIL_MISSING_MESSAGE } from "@/lib/email-check";
 
 export const maxDuration = 60;
@@ -34,12 +34,17 @@ export async function POST(req: Request) {
   const batch = parsed.data;
 
   const email = await checkClaudeEmail(ctx.workspace, { proof: batch.accountEmailProof });
-  if (email === "mismatch") return apiError(403, "email_mismatch", EMAIL_MISMATCH_MESSAGE);
+  if (email === "mismatch") {
+    await recordRefusal(ctx, "email_mismatch");
+    return apiError(403, "email_mismatch", EMAIL_MISMATCH_MESSAGE);
+  }
   if (email === "missing") return apiError(426, "upgrade_required", EMAIL_MISSING_MESSAGE);
 
   const account = await checkAccount(ctx, batch.accountHash, batch.plan?.rateLimitTier ?? null);
-  if (account === "mismatch")
+  if (account === "mismatch") {
+    await recordRefusal(ctx, "account_mismatch");
     return apiError(409, "account_mismatch", "This machine is logged into a different Claude account than this workspace tracks.");
+  }
 
   const res = await ingestTranscriptBatch(ctx, batch);
   const force = batch.records.some((r) => r.kind === "limit");

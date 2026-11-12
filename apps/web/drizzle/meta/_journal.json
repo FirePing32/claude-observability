@@ -22,6 +22,13 @@
       "when": 1791962534511,
       "tag": "0002_egress_caches",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794476601068,
+      "tag": "0003_refused_uploads",
+      "breakpoints": true
     }
   ]
 }

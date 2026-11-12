@@ -259,6 +259,62 @@ describe("incremental reads", () => {
   });
 });
 
+describe("Claude login switches", () => {
+  const loginAs = (uuid: string, email: string) =>
+    fs.writeFileSync(path.join(root, ".claude.json"), JSON.stringify({ oauthAccount: { accountUuid: uuid, emailAddress: email } }));
+  const apply = (state: State, c: ReturnType<typeof collect>) => {
+    Object.assign(state.files, c.fileUpdates);
+    Object.assign(state.sent, c.sentUpdates);
+    for (const [r, a] of Object.entries(c.accountUpdates)) if (a) state.accounts[r] = a;
+  };
+  const hashOf = (c: ReturnType<typeof collect>) => [...new Set(c.batches.map((b) => b.accountHash))];
+
+  it("doesn't send lines written around a switch it didn't see happen", () => {
+    const state = emptyState();
+    write(mainFile(), lines(assistant("req_A", 3)));
+    apply(state, collect(config, state, "salt")); // logged in as the workspace's account
+    fs.appendFileSync(mainFile(), lines(assistant("req_B", 3))); // written by either account
+    loginAs("someone-else", "other@example.com");
+    const c = collect(config, state, "salt");
+    expect(c.batches).toHaveLength(0);
+    expect(c.roots[0]!.status).toBe("account_switched");
+    expect(c.roots[0]!.skippedForSwitch).toBeGreaterThan(0);
+    apply(state, c);
+    // from here on, lines are labelled with the account now logged in (and the server judges that account)
+    fs.appendFileSync(mainFile(), lines(assistant("req_C", 3)));
+    const next = collect(config, state, "salt");
+    expect(usageOf(next).map((u) => u.requestId)).toEqual(["req_C"]);
+    expect(hashOf(next)).toEqual([hashAccount("salt", "someone-else")]);
+  });
+
+  it("labels what was written before a switch the watcher caught with the previous account", () => {
+    const state = emptyState();
+    write(mainFile(), lines(assistant("req_A", 3)));
+    apply(state, collect(config, state, "salt"));
+    fs.appendFileSync(mainFile(), lines(assistant("req_B", 3)));
+    loginAs("someone-else", "other@example.com");
+    const c = collect(config, state, "salt", { previousAccount: true });
+    expect(usageOf(c).map((u) => u.requestId)).toEqual(["req_B"]);
+    expect(hashOf(c)).toEqual([hashAccount("salt", ACCOUNT)]);
+    expect(c.accountUpdates[root]!.hash).toBe(hashAccount("salt", "someone-else"));
+    apply(state, c);
+    fs.appendFileSync(mainFile(), lines(assistant("req_C", 3)));
+    const next = collect(config, state, "salt");
+    expect(next.roots[0]!.status).toBe("ok");
+    expect(hashOf(next)).toEqual([hashAccount("salt", "someone-else")]);
+  });
+
+  it("uploads normally when the login hasn't changed", () => {
+    const state = emptyState();
+    write(mainFile(), lines(assistant("req_A", 3)));
+    apply(state, collect(config, state, "salt"));
+    fs.appendFileSync(mainFile(), lines(assistant("req_B", 3)));
+    const c = collect(config, state, "salt");
+    expect(usageOf(c).map((u) => u.requestId)).toEqual(["req_B"]);
+    expect(hashOf(c)).toEqual([hashAccount("salt", ACCOUNT)]);
+  });
+});
+
 describe("limit and error classification", () => {
   it("parses limit kinds and reset times", () => {
     expect(parseLimit("Claude AI usage limit reached|1790000000", "2026-10-01T10:00:00Z")).toEqual({

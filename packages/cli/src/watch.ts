@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "./log";
-import { files, obsHome } from "./paths";
-import { loadConfig, loadCredentials } from "./store";
-import { syncOnce } from "./sync";
+import { claudeJsonCandidates, files, obsHome } from "./paths";
+import { loadConfig, loadCredentials, loadState } from "./store";
+import { currentAccountHashes, syncOnce, type CollectOptions } from "./sync";
 
 const TICK_MS = 60 * 1000;
 const RESCAN_MS = 15 * 60 * 1000;
@@ -36,6 +36,7 @@ export function requestSyncNow(): void {
 export async function watch(log: Logger, opts: { onPass?: (summary: string) => void; intervalMin?: number } = {}): Promise<never> {
   let running = false;
   let again = false;
+  let againPrevious = false;
   let dirty = true;
   let lastPassAt = 0;
   let lastRescanAt = Date.now();
@@ -43,9 +44,10 @@ export async function watch(log: Logger, opts: { onPass?: (summary: string) => v
   let retryTimer: NodeJS.Timeout | null = null;
   const intervalMs = () => (opts.intervalMin ?? loadConfig().uploadIntervalMin) * 60 * 1000;
 
-  const pass = async () => {
+  const pass = async (passOpts: CollectOptions = {}) => {
     if (running) {
       again = true;
+      if (passOpts.previousAccount) againPrevious = true;
       return;
     }
     running = true;
@@ -57,7 +59,7 @@ export async function watch(log: Logger, opts: { onPass?: (summary: string) => v
         log.error("not logged in; run `claude-obs login`");
         process.exit(2);
       }
-      const { collected, flush } = await syncOnce(loadConfig(), creds, log);
+      const { collected, flush } = await syncOnce(loadConfig(), creds, log, passOpts);
       const queued = collected.batches.reduce((n, b) => n + b.records.length, 0);
       if (queued || flush?.uploaded) {
         const msg = `queued ${queued} records, uploaded ${flush?.uploaded ?? 0}, pending batches ${flush?.pending ?? 0}`;
@@ -86,8 +88,10 @@ export async function watch(log: Logger, opts: { onPass?: (summary: string) => v
     } finally {
       running = false;
       if (again) {
+        const previousAccount = againPrevious;
         again = false;
-        void pass();
+        againPrevious = false;
+        void pass({ previousAccount });
       }
     }
   };
@@ -119,6 +123,39 @@ export async function watch(log: Logger, opts: { onPass?: (summary: string) => v
       log.warn(`fs.watch unavailable for ${dir} (${(e as Error).message}); checking for new activity at each upload`);
     }
   }
+  // Claude login switches: session files don't say which account wrote them, so when the login changes, upload
+  // what was written so far under the account that was logged in until now, before anything is read as the new one.
+  let loginTimer: NodeJS.Timeout | null = null;
+  const checkLogin = () => {
+    const creds = loadCredentials();
+    if (!creds) return;
+    const saved = loadState().accounts;
+    const now = currentAccountHashes(loadConfig(), creds.hashSalt);
+    const switched = [...now].filter(([root, hash]) => saved[root] && saved[root]!.hash !== hash).map(([root]) => root);
+    if (!switched.length) return;
+    log.info(`Claude login changed (${switched.join(", ")}); uploading earlier activity under the previous account`);
+    void pass({ previousAccount: true });
+  };
+  const loginFiles = new Map<string, Set<string>>();
+  for (const root of roots) {
+    for (const f of claudeJsonCandidates(root)) {
+      const dir = path.dirname(f);
+      if (!loginFiles.has(dir)) loginFiles.set(dir, new Set());
+      loginFiles.get(dir)!.add(path.basename(f));
+    }
+  }
+  for (const [dir, names] of loginFiles) {
+    try {
+      fs.watch(dir, { persistent: true }, (_event, name) => {
+        if (!name || !names.has(String(name))) return;
+        if (loginTimer) clearTimeout(loginTimer);
+        loginTimer = setTimeout(checkLogin, 750);
+      });
+    } catch (e) {
+      log.warn(`can't watch ${dir} for Claude login changes (${(e as Error).message}); a switch will skip the lines written around it`);
+    }
+  }
+
   // React to `claude-obs sync` at once where watching works; the minute tick covers the rest.
   try {
     fs.mkdirSync(obsHome(), { recursive: true, mode: 0o700 });

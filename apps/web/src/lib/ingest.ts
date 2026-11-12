@@ -7,6 +7,19 @@ import { isTranscriptDuplicate, mergeOtel, mergeTranscript, type OtelRequest, ty
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+export type RefusalReason = "account_mismatch" | "email_mismatch";
+
+/**
+ * Count an upload refused for coming from another Claude account, per machine, so owners can see in
+ * Settings → Machines which collector is trying to send someone else's usage.
+ */
+export async function recordRefusal(ctx: DeviceContext, reason: RefusalReason): Promise<void> {
+  await db
+    .update(schema.devices)
+    .set({ refusedUploads: sql`${schema.devices.refusedUploads} + 1`, lastRefusedAt: new Date(), lastRefusedReason: reason })
+    .where(eq(schema.devices.id, ctx.device.id));
+}
+
 export type AccountCheck = "ok" | "pinned" | "mismatch";
 
 /**

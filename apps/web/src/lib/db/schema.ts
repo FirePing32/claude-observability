@@ -154,6 +154,10 @@ export const devices = pgTable(
     createdAt: ts("created_at").notNull().defaultNow(),
     lastSeenAt: ts("last_seen_at"),
     revokedAt: ts("revoked_at"),
+    /** Uploads the server refused because they came from another Claude account (or an unapproved e-mail). */
+    refusedUploads: integer("refused_uploads").notNull().default(0),
+    lastRefusedAt: ts("last_refused_at"),
+    lastRefusedReason: text("last_refused_reason"),
   },
   (t) => [index("devices_ws").on(t.workspaceId)],
 );

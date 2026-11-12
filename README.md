@@ -374,7 +374,12 @@ fixture case in `packages/cli/test/collect.test.ts`, and keep the privacy test p
 - Every page, query and server action checks workspace membership, and owner-only actions check the role.
 - The `/admin` page is protected by `ADMIN_PASSWORD`, with a signed HTTP-only cookie (12 h, path `/admin`), constant-time
   comparison and 5 attempts per 15 minutes per IP. It shows aggregates only.
-- Uploads from a different Claude account than the one the workspace is pinned to are rejected.
+- Uploads from a different Claude account than the one the workspace is pinned to are rejected, and counted per machine
+  (Settings → Machines shows "uploads refused").
+- **Switching Claude accounts on one machine.** Session files don't record which account wrote them, so the collector
+  remembers the account at each upload and watches the Claude login file. On a switch it first uploads what was written
+  under the previous account; if a switch happens while the agent isn't running, the lines written around it are skipped
+  rather than guessed.
 - **Claude account e-mail check** (on by default, Settings → Claude account): machines must be logged into Claude
   with a workspace owner's e-mail or one on the workspace's extra list. The collector sends only a one-way hash of
   the e-mail (at login and with every upload), and the server compares it and discards it. Mismatches are refused

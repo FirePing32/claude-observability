@@ -101,6 +101,13 @@ function report(c: CollectResult): void {
       console.log("  skipped: no Claude login found in .claude.json (run `claude` and log in first)");
       continue;
     }
+    if (rr.status === "account_switched") {
+      console.log(
+        `  skipped ${fmt(rr.skippedForSwitch)} records: the Claude login changed since the last upload, so they may belong to the other account.\n` +
+          "  Later activity uploads normally. Keep the background agent running to label activity correctly across switches.",
+      );
+      continue;
+    }
     const usage = rr.records.filter((r): r is UsageRecord => r.kind === "usage");
     const by = new Map<string, { n: number; in: number; out: number; cr: number; cw: number; v: number }>();
     let unknownValue = 0;
@@ -267,6 +274,10 @@ async function main(): Promise<void> {
       console.log(`Tracked files: ${Object.keys(state.files).length}  ·  pending batches: ${pendingCount()}`);
       console.log(`Last sync: ${state.lastSyncAt ?? "never"}  ·  last upload: ${state.lastUploadAt ?? "never"}`);
       if (state.lastError) console.log(`Last error: ${state.lastError}`);
+      if (state.lastSwitchSkip)
+        console.log(
+          `Last Claude login switch: ${state.lastSwitchSkip.at} · ${fmt(state.lastSwitchSkip.records)} records around it weren't uploaded (they may belong to the other account)`,
+        );
       const holder = lockHolder();
       console.log(
         `Background agent: ${agentInstalled() ? "installed" : "not installed"}${holder ? `, running (pid ${holder}), uploads every ${config.uploadIntervalMin} min` : ""}`,

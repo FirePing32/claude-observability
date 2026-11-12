@@ -94,6 +94,11 @@ The background agent uploads new activity every **10 minutes** by default, so th
 between uploads. Change it with `claude-obs config upload-interval <1–60>`. Run `claude-obs sync` at any time to
 upload immediately; if the agent is running, it asks the agent to do it.
 
+**Switching Claude accounts.** Claude Code's session files don't say which account wrote them. The background agent
+watches the Claude login, so when someone switches accounts it labels earlier activity with the account that was logged
+in at the time. If the login changes while the agent isn't running, the activity written around the switch is skipped
+(`claude-obs status` says so), so another account's usage is never counted as yours.
+
 Local state lives in `~/.config/claude-obs` (override with `CLAUDE_OBS_HOME`).
 
 ## License

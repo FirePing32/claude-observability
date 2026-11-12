@@ -10,16 +10,30 @@ import type { Logger } from "./log";
 import { Accumulator, parseLine } from "./parse";
 import { PARSER_VERSION, files } from "./paths";
 import { readNewLines } from "./reader";
-import { loadConfig, loadState, readJson, saveState, writeJsonAtomic, type Config, type Credentials, type FileState, type State } from "./store";
+import {
+  loadConfig,
+  loadState,
+  readJson,
+  saveState,
+  writeJsonAtomic,
+  type Config,
+  type Credentials,
+  type FileState,
+  type SavedAccount,
+  type State,
+} from "./store";
 
 export interface RootResult {
   root: string;
-  status: "ok" | "no_account" | "missing";
+  /** account_switched: the Claude login changed since the last pass, so this pass's lines were read but not sent. */
+  status: "ok" | "no_account" | "missing" | "account_switched";
   files: number;
   bytes: number;
   acc: Accumulator;
   records: IngestRecord[];
   alreadySent: number;
+  /** Records not sent because they may belong to the other account (see status account_switched). */
+  skippedForSwitch: number;
 }
 
 export interface CollectResult {
@@ -27,26 +41,64 @@ export interface CollectResult {
   batches: IngestBatch[];
   fileUpdates: Record<string, FileState>;
   sentUpdates: Record<string, [number, number]>;
+  /** The account now logged in for each root (null when logged out), to remember for the next pass. */
+  accountUpdates: Record<string, SavedAccount | null>;
 }
 
-/** Parse everything new under each configured Claude root into upload batches (no I/O side effects). */
-export function collect(config: Config, state: State, salt: string, opts: { all?: boolean } = {}): CollectResult {
-  const result: CollectResult = { roots: [], batches: [], fileUpdates: {}, sentUpdates: {} };
+export interface CollectOptions {
+  /** Ignore local progress and re-read everything (resync, dry-run --all). */
+  all?: boolean;
+  /**
+   * The Claude login has just changed: label what's been written since the last pass with the account that was
+   * logged in then, not the new one. Set by the watcher when it sees the login file change.
+   */
+  previousAccount?: boolean;
+}
+
+const toSaved = (salt: string, a: ReturnType<typeof readAccount>): SavedAccount | null =>
+  a.accountUuid
+    ? { hash: hashAccount(salt, a.accountUuid), emailProof: a.emailProof, rateLimitTier: a.rateLimitTier, seatTier: a.seatTier, billingType: a.billingType }
+    : null;
+
+/** The salted hash of the account each root is logged into now (null when logged out). */
+export function currentAccountHashes(config: Config, salt: string): Map<string, string | null> {
+  return new Map(config.configDirs.map((root) => [root, toSaved(salt, readAccount(root))?.hash ?? null]));
+}
+
+/**
+ * Parse everything new under each configured Claude root into upload batches (no I/O side effects).
+ *
+ * Session files don't record which Claude account wrote them, so lines are labelled with the account logged in
+ * when they're read. To keep another account's usage out after a login switch, the account seen at each pass is
+ * remembered: if it differs now and the watcher didn't catch the switch as it happened, the lines written in
+ * between could belong to either account, so they're read past but not sent.
+ */
+export function collect(config: Config, state: State, salt: string, opts: CollectOptions = {}): CollectResult {
+  const result: CollectResult = { roots: [], batches: [], fileUpdates: {}, sentUpdates: {}, accountUpdates: {} };
   const projectOf = makeProjectNamer(salt, config.hashProjects);
 
   for (const root of config.configDirs) {
     const acc = new Accumulator();
-    const rr: RootResult = { root, status: "ok", files: 0, bytes: 0, acc, records: [], alreadySent: 0 };
+    const rr: RootResult = { root, status: "ok", files: 0, bytes: 0, acc, records: [], alreadySent: 0, skippedForSwitch: 0 };
     result.roots.push(rr);
     if (!fs.existsSync(path.join(root, "projects"))) {
       rr.status = "missing";
       continue;
     }
-    const account = readAccount(root);
-    if (!account.accountUuid) {
+    const current = toSaved(salt, readAccount(root));
+    const saved = opts.all ? undefined : state.accounts?.[root];
+    let label: SavedAccount;
+    let ambiguous = false;
+    if (opts.previousAccount && saved) {
+      label = saved; // the login just changed; everything up to now was written under the old account
+    } else if (!current) {
       rr.status = "no_account";
       continue;
+    } else {
+      label = current;
+      ambiguous = Boolean(saved && saved.hash !== current.hash);
     }
+    result.accountUpdates[root] = current;
 
     for (const f of discoverTranscripts(root)) {
       const prev = opts.all ? undefined : state.files[f.path];
@@ -57,6 +109,12 @@ export function collect(config: Config, state: State, salt: string, opts: { all?
       rr.bytes += r.bytes;
       // save whenever anything differs (including the device id), so a stale entry can't keep forcing re-reads
       if (!prev || r.state.offset !== prev.offset || r.state.ino !== prev.ino || r.state.dev !== prev.dev) result.fileUpdates[f.path] = r.state;
+    }
+
+    if (ambiguous) {
+      rr.status = "account_switched";
+      rr.skippedForSwitch = acc.usage.size + acc.meta.size + acc.snapshots.size + acc.events.size + acc.errors.size + acc.limits.size;
+      continue;
     }
 
     // Requests: skip ones already sent with the same or larger output (streaming may grow it).
@@ -79,9 +137,9 @@ export function collect(config: Config, state: State, salt: string, opts: { all?
 
     const header: Omit<IngestBatch, "records"> = {
       schemaVersion: SCHEMA_VERSION,
-      accountHash: hashAccount(salt, account.accountUuid),
-      accountEmailProof: account.emailProof,
-      plan: { rateLimitTier: account.rateLimitTier, seatTier: account.seatTier, billingType: account.billingType },
+      accountHash: label.hash,
+      accountEmailProof: label.emailProof,
+      plan: { rateLimitTier: label.rateLimitTier, seatTier: label.seatTier, billingType: label.billingType },
       device: { os: `${process.platform}-${process.arch}`, ccVersions: [...acc.ccVersions].slice(0, 50) },
       parser: { version: PARSER_VERSION, unknownTypes: acc.unknownTypes, malformedLines: acc.malformedLines },
     };
@@ -209,13 +267,24 @@ export interface SyncResult {
  * as soon as batches are safely in the outbox; a crash in between only causes
  * a re-send, which the server deduplicates. Nothing is ever lost.
  */
-export async function syncOnce(config: Config, creds: Credentials, log: Logger, opts: { all?: boolean } = {}): Promise<SyncResult> {
+export async function syncOnce(config: Config, creds: Credentials, log: Logger, opts: CollectOptions = {}): Promise<SyncResult> {
   const state = loadState();
   const collected = collect(config, state, creds.hashSalt, opts);
   for (const b of collected.batches) enqueue(b);
 
   Object.assign(state.files, collected.fileUpdates);
   Object.assign(state.sent, collected.sentUpdates);
+  for (const [root, a] of Object.entries(collected.accountUpdates)) {
+    if (a) state.accounts[root] = a;
+    else delete state.accounts[root];
+  }
+  for (const rr of collected.roots) {
+    if (rr.status !== "account_switched") continue;
+    state.lastSwitchSkip = { at: new Date().toISOString(), root: rr.root, records: rr.skippedForSwitch };
+    log.warn(
+      `Claude login in ${rr.root} changed since the last upload; skipped ${rr.skippedForSwitch} records written around the switch so another account's usage isn't counted`,
+    );
+  }
   for (const rr of collected.roots) {
     for (const [k, v] of Object.entries(rr.acc.unknownTypes)) state.unknownTypes[k] = (state.unknownTypes[k] ?? 0) + v;
     state.malformedLines += rr.acc.malformedLines;

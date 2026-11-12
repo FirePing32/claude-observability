@@ -411,10 +411,14 @@ export async function devicesWithStats(ws: string) {
     revoked_at: Date | null;
     cc_versions: string[];
     parser_version: string | null;
+    refused_uploads: number;
+    last_refused_at: Date | null;
+    last_refused_reason: string | null;
     requests_7d: number;
     value_7d: number;
   }>(sql`
     select d.id, d.name, d.os, d.enrolled_via, d.created_at, d.last_seen_at, d.revoked_at, d.cc_versions, d.parser_version,
+      d.refused_uploads, d.last_refused_at, d.last_refused_reason,
       (select count(*) from api_requests r where r.workspace_id = d.workspace_id and r.device_id = d.id and r.ts > now() - interval '7 days')::int requests_7d,
       (select coalesce(sum(value_usd), 0) from api_requests r where r.workspace_id = d.workspace_id and r.device_id = d.id and r.ts > now() - interval '7 days')::float8 value_7d
     from devices d where d.workspace_id = ${ws} order by d.revoked_at nulls first, d.last_seen_at desc nulls last`);

@@ -3,7 +3,7 @@ import { gunzipSync } from "node:zlib";
 import type { DeviceContext } from "./device-auth";
 import { authenticateDevice } from "./device-auth";
 import { apiError, rateLimited } from "./http";
-import { checkAccount } from "./ingest";
+import { checkAccount, recordRefusal } from "./ingest";
 import { checkClaudeEmail, EMAIL_MISMATCH_MESSAGE } from "./email-check";
 import { hashAccountUuid } from "./otlp";
 
@@ -30,12 +30,16 @@ export async function otlpEmailRejection(ctx: DeviceContext, emails: Set<string>
   if (!hasData && !emails.size) return null; // nothing to store, nothing to verify
   const r = await checkClaudeEmail(ctx.workspace, { emails });
   if (r === "ok") return null;
+  if (r === "mismatch") await recordRefusal(ctx, "email_mismatch");
   return apiError(403, "email_mismatch", r === "missing" ? "Telemetry has no user.email to verify against this workspace." : EMAIL_MISMATCH_MESSAGE);
 }
 
 export async function otlpAccountOk(ctx: DeviceContext, uuids: Set<string>): Promise<boolean> {
   for (const u of uuids) {
-    if ((await checkAccount(ctx, hashAccountUuid(ctx.workspace.hashSalt, u), null)) === "mismatch") return false;
+    if ((await checkAccount(ctx, hashAccountUuid(ctx.workspace.hashSalt, u), null)) === "mismatch") {
+      await recordRefusal(ctx, "account_mismatch");
+      return false;
+    }
   }
   return true;
 }

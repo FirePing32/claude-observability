@@ -8,6 +8,12 @@ import { allowedClaudeEmails } from "@/lib/email-check";
 import { EnrollmentCodes } from "./codes";
 import { ClaudeEmailPolicyForm, DeleteWorkspaceForm, DeviceActions, RemoveDevice, SmallAction } from "./forms";
 
+/** Why the server refused a machine's uploads (devices.last_refused_reason). */
+const REFUSAL_REASON: Record<string, string> = {
+  account_mismatch: "logged into a different Claude account",
+  email_mismatch: "Claude login e-mail isn't approved",
+};
+
 export default async function Settings(props: PageProps) {
   const { id, workspace: ws, role, tz } = await pageContext(props);
   const owner = role === "owner";
@@ -71,10 +77,20 @@ export default async function Settings(props: PageProps) {
         <Table head={["Machine", "System", "Claude Code", "Enrolled", "Last upload", "Last 7 days", ""]}>
           {devices.map((d) => {
             const stale = !d.revoked_at && (!d.last_seen_at || now - new Date(d.last_seen_at).getTime() > 3 * 86_400_000);
+            const refusing = Boolean(d.last_refused_at && now - new Date(d.last_refused_at).getTime() < 7 * 86_400_000);
             return (
               <tr key={d.id} className={d.revoked_at ? "opacity-50" : ""}>
                 <Td right={false}>
                   {d.name} {d.revoked_at ? <Badge>revoked</Badge> : stale ? <Badge tone="warn">⚠ silent</Badge> : null}
+                  {refusing && (
+                    <>
+                      {" "}
+                      <Badge tone="bad">⚠ uploads refused</Badge>
+                      <div className="mt-0.5 text-[11px] text-muted">
+                        {int(d.refused_uploads)} refused · {REFUSAL_REASON[d.last_refused_reason ?? ""] ?? "another Claude account"} · last {relTime(d.last_refused_at)}
+                      </div>
+                    </>
+                  )}
                 </Td>
                 <Td>{d.os ?? "-"}</Td>
                 <Td>{d.cc_versions.at(-1) ?? "-"}</Td>
@@ -99,6 +115,12 @@ export default async function Settings(props: PageProps) {
           })}
         </Table>
         {!devices.length && <p className="py-6 text-center text-sm text-muted">No machines yet. See Connect machines.</p>}
+        {devices.some((d) => d.last_refused_at && now - new Date(d.last_refused_at).getTime() < 7 * 86_400_000) && (
+          <p className="mt-3 text-xs text-muted">
+            ⚠ uploads refused: the machine sent usage from a Claude account other than the one this workspace tracks, and none of it was
+            stored. Ask whoever uses it to log in to Claude with this workspace&apos;s account, or revoke it.
+          </p>
+        )}
       </Card>
 
       <EnrollmentCodes workspaceId={id} tz={tz} owner={owner} />
