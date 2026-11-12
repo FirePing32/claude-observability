@@ -45,6 +45,18 @@ const maxOrNull = (a: number | null | undefined, b: number | null | undefined) =
 const union = (a: string[] | undefined, b: string) => [...new Set([...(a ?? []), b])].sort();
 
 /**
+ * True when the server already holds everything this transcript record carries: the stored row came from a
+ * transcript and its output and thinking are at least as large (streaming only ever grows them). Needs only
+ * four small columns, so duplicates can be dropped without reading whole rows.
+ */
+export function isTranscriptDuplicate(
+  existing: { output: number | null; thinking: number | null; sources: string[] | null },
+  u: Pick<UsageRecord, "output" | "thinking">,
+): boolean {
+  return (existing.sources?.includes("transcript") ?? false) && u.output <= (existing.output ?? 0) && (u.thinking ?? 0) <= (existing.thinking ?? 0);
+}
+
+/**
  * Merge a transcript usage record into whatever is already stored for the same
  * request. Transcript token counts are authoritative (they carry the 5m/1h cache
  * split); `output` only ever grows (streaming lines); OTel-only fields survive.
@@ -89,11 +101,10 @@ export function mergeTranscript(
   };
   if (!existing) return { row: priced(fromTranscript), changed: true };
 
-  const hadTranscript = existing.sources?.includes("transcript") ?? false;
-  const output = Math.max(existing.output ?? 0, u.output);
-  if (hadTranscript && output === existing.output && (u.thinking ?? 0) <= (existing.thinking ?? 0)) {
+  if (isTranscriptDuplicate({ output: existing.output ?? null, thinking: existing.thinking ?? null, sources: existing.sources ?? null }, u)) {
     return { row: existing, changed: false };
   }
+  const output = Math.max(existing.output ?? 0, u.output);
   const row: RequestRow = {
     ...fromTranscript,
     output,

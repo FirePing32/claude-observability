@@ -3,7 +3,7 @@ import type { IngestBatch, UsageRecord } from "@claude-obs/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "./db";
 import type { DeviceContext } from "./device-auth";
-import { mergeOtel, mergeTranscript, type OtelRequest, type RequestRow } from "./merge";
+import { isTranscriptDuplicate, mergeOtel, mergeTranscript, type OtelRequest, type RequestRow } from "./merge";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -106,6 +106,29 @@ async function upsertRequests<T extends { requestId: string }>(
   return { accepted: incoming.length - deduplicated, deduplicated };
 }
 
+/**
+ * A collector that re-sends history (a bug, a `resync`, a rewritten session file) would otherwise make every
+ * duplicate read its whole stored row back from the database. Checking four small columns first keeps a
+ * re-sent request down to a few dozen bytes of database transfer.
+ */
+async function dropKnownTranscriptRequests(tx: Tx, workspaceId: string, incoming: UsageRecord[]): Promise<UsageRecord[]> {
+  if (!incoming.length) return incoming;
+  const known = await tx
+    .select({
+      requestId: schema.apiRequests.requestId,
+      output: schema.apiRequests.output,
+      thinking: schema.apiRequests.thinking,
+      sources: schema.apiRequests.sources,
+    })
+    .from(schema.apiRequests)
+    .where(and(eq(schema.apiRequests.workspaceId, workspaceId), inArray(schema.apiRequests.requestId, incoming.map((r) => r.requestId))));
+  const byId = new Map(known.map((k) => [k.requestId, k]));
+  return incoming.filter((u) => {
+    const k = byId.get(u.requestId);
+    return !k || !isTranscriptDuplicate(k, u);
+  });
+}
+
 export async function ingestTranscriptBatch(ctx: DeviceContext, batch: IngestBatch) {
   const ws = ctx.workspace.id;
   const deviceId = ctx.device.id;
@@ -120,23 +143,27 @@ export async function ingestTranscriptBatch(ctx: DeviceContext, batch: IngestBat
           usage.push(r);
           break;
         case "session_meta":
-          await tx
-            .insert(schema.sessionMeta)
-            .values({ workspaceId: ws, sessionId: r.sessionId, title: r.title, titleSource: r.titleSource, agentName: r.agentName })
-            .onConflictDoUpdate({
-              target: [schema.sessionMeta.workspaceId, schema.sessionMeta.sessionId],
-              set: {
-                // a user-set (custom) title is never replaced by a generated one
-                title: sql`case when ${schema.sessionMeta.titleSource} = 'custom' and excluded.title_source = 'ai' then ${schema.sessionMeta.title} else coalesce(excluded.title, ${schema.sessionMeta.title}) end`,
-                titleSource: sql`case when ${schema.sessionMeta.titleSource} = 'custom' and excluded.title_source = 'ai' then ${schema.sessionMeta.titleSource} else coalesce(excluded.title_source, ${schema.sessionMeta.titleSource}) end`,
-                agentName: sql`coalesce(excluded.agent_name, ${schema.sessionMeta.agentName})`,
-                updatedAt: sql`now()`,
-              },
-            });
-          accepted++;
+          {
+            // a user-set (custom) title is never replaced by a generated one
+            const title = sql`case when ${schema.sessionMeta.titleSource} = 'custom' and excluded.title_source = 'ai' then ${schema.sessionMeta.title} else coalesce(excluded.title, ${schema.sessionMeta.title}) end`;
+            const titleSource = sql`case when ${schema.sessionMeta.titleSource} = 'custom' and excluded.title_source = 'ai' then ${schema.sessionMeta.titleSource} else coalesce(excluded.title_source, ${schema.sessionMeta.titleSource}) end`;
+            const agentName = sql`coalesce(excluded.agent_name, ${schema.sessionMeta.agentName})`;
+            const res = await tx
+              .insert(schema.sessionMeta)
+              .values({ workspaceId: ws, sessionId: r.sessionId, title: r.title, titleSource: r.titleSource, agentName: r.agentName })
+              .onConflictDoUpdate({
+                target: [schema.sessionMeta.workspaceId, schema.sessionMeta.sessionId],
+                set: { title, titleSource, agentName, updatedAt: sql`now()` },
+                // re-sent records that change nothing skip the write (no dead row, no WAL)
+                setWhere: sql`(${schema.sessionMeta.title}, ${schema.sessionMeta.titleSource}, ${schema.sessionMeta.agentName}) is distinct from (${title}, ${titleSource}, ${agentName})`,
+              })
+              .returning({ id: schema.sessionMeta.sessionId });
+            if (res.length) accepted++;
+            else deduplicated++;
+          }
           break;
-        case "session_snapshot":
-          await tx
+        case "session_snapshot": {
+          const snap = await tx
             .insert(schema.sessionSnapshots)
             .values({
               workspaceId: ws,
@@ -161,9 +188,16 @@ export async function ingestTranscriptBatch(ctx: DeviceContext, batch: IngestBat
                 modelUsage: sql`excluded.model_usage`,
                 updatedAt: sql`now()`,
               },
-            });
-          accepted++;
+              setWhere: sql`(${schema.sessionSnapshots.startedAt}, ${schema.sessionSnapshots.totalCostUsd}, ${schema.sessionSnapshots.apiMs}, ${schema.sessionSnapshots.toolMs},
+                ${schema.sessionSnapshots.linesAdded}, ${schema.sessionSnapshots.linesRemoved}, ${schema.sessionSnapshots.modelUsage})
+                is distinct from (excluded.started_at, excluded.total_cost_usd, excluded.api_ms, excluded.tool_ms,
+                excluded.lines_added, excluded.lines_removed, excluded.model_usage)`,
+            })
+            .returning({ id: schema.sessionSnapshots.sessionId });
+          if (snap.length) accepted++;
+          else deduplicated++;
           break;
+        }
         case "session_event": {
           const res = await tx
             .insert(schema.sessionEvents)
@@ -213,7 +247,9 @@ export async function ingestTranscriptBatch(ctx: DeviceContext, batch: IngestBat
         }
       }
     }
-    const u = await upsertRequests(tx, ws, usage, (ex, rec) => mergeTranscript(ex, rec, ws, deviceId));
+    const fresh = await dropKnownTranscriptRequests(tx, ws, usage);
+    deduplicated += usage.length - fresh.length;
+    const u = await upsertRequests(tx, ws, fresh, (ex, rec) => mergeTranscript(ex, rec, ws, deviceId));
     accepted += u.accepted;
     deduplicated += u.deduplicated;
   });

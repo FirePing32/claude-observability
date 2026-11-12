@@ -1,6 +1,6 @@
 import type { UsageRecord } from "@claude-obs/shared";
 import { describe, expect, it } from "vitest";
-import { mergeOtel, mergeTranscript, type OtelRequest } from "../src/lib/merge";
+import { isTranscriptDuplicate, mergeOtel, mergeTranscript, type OtelRequest } from "../src/lib/merge";
 
 const u = (o: Partial<UsageRecord> = {}): UsageRecord => ({
   kind: "usage",
@@ -95,5 +95,20 @@ describe("mergeOtel", () => {
     const { row } = mergeOtel(undefined, otel({ requestId: "req_side", model: "claude-haiku-4-5", querySource: "generate_session_title" }), "ws", "dev");
     expect(row.sources).toEqual(["otel"]);
     expect(row.valueUsd).toBeGreaterThan(0);
+  });
+});
+
+describe("isTranscriptDuplicate", () => {
+  const stored = { output: 300, thinking: 20, sources: ["transcript"] };
+  it("treats a re-sent request with the same or smaller counts as a duplicate", () => {
+    expect(isTranscriptDuplicate(stored, { output: 300, thinking: 20 })).toBe(true);
+    expect(isTranscriptDuplicate(stored, { output: 120, thinking: null })).toBe(true);
+  });
+  it("lets a request through when streaming grew it", () => {
+    expect(isTranscriptDuplicate(stored, { output: 301, thinking: 20 })).toBe(false);
+    expect(isTranscriptDuplicate(stored, { output: 300, thinking: 25 })).toBe(false);
+  });
+  it("lets a transcript through when only telemetry has seen the request", () => {
+    expect(isTranscriptDuplicate({ ...stored, sources: ["otel"] }, { output: 300, thinking: 20 })).toBe(false);
   });
 });
