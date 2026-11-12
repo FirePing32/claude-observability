@@ -5,6 +5,7 @@ import {
   createEnrollmentCode,
   deleteWorkspace,
   updateClaudeEmailPolicy,
+  removeDevice,
   renameDevice,
   revokeDevice,
 } from "@/app/actions";
@@ -80,6 +81,54 @@ export function DeviceActions({ workspaceId, deviceId, name }: { workspaceId: st
       >
         Revoke
       </button>
+    </span>
+  );
+}
+
+/** Remove a revoked machine, optionally moving its usage history to another machine. */
+export function RemoveDevice({ workspaceId, deviceId, name, targets }: { workspaceId: string; deviceId: string; name: string; targets: { id: string; name: string }[] }) {
+  const [open, setOpen] = useState(false);
+  const [moveTo, setMoveTo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  if (!open)
+    return (
+      <button className="text-xs text-bad" onClick={() => setOpen(true)}>
+        Remove
+      </button>
+    );
+  const where = targets.find((t) => t.id === moveTo)?.name;
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-2 text-xs">
+      <label className="text-muted" htmlFor={`move-${deviceId}`}>
+        Its usage:
+      </label>
+      <select id={`move-${deviceId}`} value={moveTo} onChange={(e) => setMoveTo(e.target.value)} className={`${inputCls} w-44 py-0.5 text-xs`}>
+        <option value="">Keep, without a machine</option>
+        {targets.map((t) => (
+          <option key={t.id} value={t.id}>
+            Move to {t.name}
+          </option>
+        ))}
+      </select>
+      <button
+        className="text-bad"
+        disabled={pending}
+        onClick={() => {
+          const what = where ? `Its usage history moves to "${where}".` : "Its usage stays in the totals without a machine.";
+          if (!confirm(`Remove "${name}" permanently? ${what}`)) return;
+          start(async () => {
+            const r = await removeDevice(workspaceId, deviceId, moveTo || null);
+            setError(r.error ?? null);
+          });
+        }}
+      >
+        {pending ? "Removing…" : "Remove"}
+      </button>
+      <button className="text-muted" onClick={() => setOpen(false)} disabled={pending}>
+        Cancel
+      </button>
+      {error && <span className="w-full text-right text-bad">{error}</span>}
     </span>
   );
 }

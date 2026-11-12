@@ -6,7 +6,7 @@ import { pageContext, type PageProps } from "@/lib/page";
 import { dataQuality, devicesWithStats } from "@/lib/queries";
 import { allowedClaudeEmails } from "@/lib/email-check";
 import { EnrollmentCodes } from "./codes";
-import { ClaudeEmailPolicyForm, DeleteWorkspaceForm, DeviceActions, SmallAction } from "./forms";
+import { ClaudeEmailPolicyForm, DeleteWorkspaceForm, DeviceActions, RemoveDevice, SmallAction } from "./forms";
 
 export default async function Settings(props: PageProps) {
   const { id, workspace: ws, role, tz } = await pageContext(props);
@@ -83,7 +83,17 @@ export default async function Settings(props: PageProps) {
                 <Td>
                   {int(d.requests_7d)} req · {usd(d.value_7d)}
                 </Td>
-                <Td>{owner && !d.revoked_at && <DeviceActions workspaceId={id} deviceId={d.id} name={d.name} />}</Td>
+                <Td>
+                  {owner && !d.revoked_at && <DeviceActions workspaceId={id} deviceId={d.id} name={d.name} />}
+                  {owner && d.revoked_at && (
+                    <RemoveDevice
+                      workspaceId={id}
+                      deviceId={d.id}
+                      name={d.name}
+                      targets={devices.filter((o) => o.id !== d.id && !o.revoked_at).map((o) => ({ id: o.id, name: o.name }))}
+                    />
+                  )}
+                </Td>
               </tr>
             );
           })}

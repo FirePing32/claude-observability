@@ -122,6 +122,39 @@ export async function revokeDevice(wsId: string, deviceId: string) {
   revalidatePath(`/w/${wsId}/settings`);
 }
 
+/**
+ * Delete a revoked machine. Its usage history either moves to another machine in the workspace (e.g. the same
+ * computer, re-enrolled) or stays in the totals without a machine. Only revoked machines can be removed, so an
+ * active collector can't lose its identity by accident.
+ */
+export async function removeDevice(wsId: string, deviceId: string, moveTo: string | null): Promise<{ error?: string }> {
+  await requireMember(wsId, "owner");
+  const err = await db.transaction(async (tx) => {
+    const inWs = (id: string) => and(eq(schema.devices.id, id), eq(schema.devices.workspaceId, wsId));
+    const [d] = await tx.select().from(schema.devices).where(inWs(deviceId));
+    if (!d) return "That machine no longer exists.";
+    if (!d.revokedAt) return "Revoke the machine before removing it.";
+    let target: string | null = null;
+    if (moveTo) {
+      const [t] = await tx.select().from(schema.devices).where(inWs(moveTo));
+      if (!t || t.id === deviceId) return "Pick another machine in this workspace.";
+      target = t.id;
+    }
+    for (const table of [schema.apiRequests, schema.errorEvents, schema.limitEvents, schema.otelMetrics, schema.ingestLog]) {
+      await tx
+        .update(table)
+        .set({ deviceId: target })
+        .where(and(eq(table.workspaceId, wsId), eq(table.deviceId, deviceId)));
+    }
+    await tx.delete(schema.devices).where(inWs(deviceId));
+    return null;
+  });
+  if (err) return { error: err };
+  revalidatePath(`/w/${wsId}/settings`);
+  revalidatePath(`/w/${wsId}/machines`);
+  return {};
+}
+
 /** Device-code flow: an owner approves the CLI's code in the browser. */
 export async function decideDevice(_: ActionState, form: FormData): Promise<ActionState> {
   const user = await requireUser();
