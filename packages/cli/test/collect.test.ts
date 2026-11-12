@@ -233,6 +233,22 @@ describe("incremental reads", () => {
     expect(again[0]!.output).toBe(294);
   });
 
+  it("keeps its place when the disk's device id changes (macOS renumbers volumes on restart)", () => {
+    const state = emptyState();
+    write(mainFile(), lines(assistant("req_A", 3), assistant("req_B", 3), JSON.stringify({ type: "ai-title", sessionId: SESSION, aiTitle: "t" })));
+    apply(state, collect(config, state, "salt"));
+    state.sent = {}; // requests older than the sent cache: a re-read would re-send them
+    const saved = state.files[mainFile()]!;
+    state.files[mainFile()] = { ...saved, dev: saved.dev + 7 };
+    const c = collect(config, state, "salt");
+    expect(c.batches).toHaveLength(0);
+    // the new device id is saved, so later passes match exactly
+    expect(c.fileUpdates[mainFile()]).toEqual(saved);
+    apply(state, c);
+    fs.appendFileSync(mainFile(), lines(assistant("req_C", 3)));
+    expect(usageOf(collect(config, state, "salt")).map((u) => u.requestId)).toEqual(["req_C"]);
+  });
+
   it("restarts from zero when a file is truncated", () => {
     const state = emptyState();
     write(mainFile(), lines(assistant("req_A", 3), assistant("req_B", 3)));

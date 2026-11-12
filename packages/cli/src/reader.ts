@@ -24,7 +24,10 @@ export function readNewLines(file: string, prev: FileState | undefined, onLine: 
   }
   try {
     const st = fs.fstatSync(fd);
-    const same = prev && prev.ino === st.ino && prev.dev === st.dev && prev.offset <= st.size;
+    // Same path and inode means the same file. The device id is deliberately not compared: macOS renumbers
+    // volumes when they mount, so it changes across restarts while files stay put. Comparing it made every
+    // file look new after a restart, re-reading (and re-uploading) the whole history on every pass.
+    const same = prev && prev.ino === st.ino && prev.offset <= st.size;
     const start = same ? prev.offset : 0;
     let pos = start;
     let committed = start;

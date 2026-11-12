@@ -55,7 +55,8 @@ export function collect(config: Config, state: State, salt: string, opts: { all?
       if (!r) continue;
       rr.files++;
       rr.bytes += r.bytes;
-      if (!prev || r.state.offset !== prev.offset || r.state.ino !== prev.ino) result.fileUpdates[f.path] = r.state;
+      // save whenever anything differs (including the device id), so a stale entry can't keep forcing re-reads
+      if (!prev || r.state.offset !== prev.offset || r.state.ino !== prev.ino || r.state.dev !== prev.dev) result.fileUpdates[f.path] = r.state;
     }
 
     // Requests: skip ones already sent with the same or larger output (streaming may grow it).
